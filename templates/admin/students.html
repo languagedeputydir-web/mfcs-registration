@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Students — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Students <span class="text-muted fs-6 fw-normal">({{ students|length }})</span></h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.export_students', pid=pid, lang=lang_filter or None, cult=cult_filter or None) }}" class="btn btn-sm btn-outline-secondary">↓ CSV</a>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-3 mb-4">
+  <form class="d-flex gap-3 align-items-end flex-wrap" method="get">
+    <div>
+      <label class="form-label small fw-500 mb-1">School Year</label>
+      <select name="pid" class="form-select form-select-sm" style="width:160px">
+        {% for p in periods_list %}
+        <option value="{{ p.id }}" {% if pid and p.id|string==pid|string %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label small fw-500 mb-1">Language Program</label>
+      <select name="lang" class="form-select form-select-sm" style="width:180px">
+        <option value="">All</option>
+        {% for lc in lang_classes %}
+        <option value="{{ lc.id }}" {% if lang_filter and lc.id|string==lang_filter %}selected{% endif %}>{{ lc.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label small fw-500 mb-1">Cultural Program</label>
+      <select name="cult" class="form-select form-select-sm" style="width:180px">
+        <option value="">All</option>
+        {% for cc in cult_classes %}
+        <option value="{{ cc.id }}" {% if cult_filter and cc.id|string==cult_filter %}selected{% endif %}>{{ cc.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-sm btn-admin">Filter</button>
+    {% if lang_filter or cult_filter %}
+    <a href="{{ url_for('admin.students', pid=pid) }}" class="btn btn-sm btn-link text-muted">Clear filters</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <table class="table table-hover mb-0 small">
+    <thead class="table-light">
+      <tr>
+        <th>Student</th>
+        <th>Family</th>
+        <th>Birthday</th>
+        <th>Language</th>
+        <th>Culture 1</th>
+        <th>Culture 2</th>
+        <th>Special Note</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in students %}
+      <tr>
+        <td>
+          <span class="fw-500">{{ s.last_name }}, {{ s.first_name }}</span>
+          {% if s.chinese_name and s.chinese_name != '?' %}
+          <div class="text-muted" style="font-size:.8rem">{{ s.chinese_name }}</div>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('admin.family_detail', fid=s.family_id) }}" class="text-decoration-none">
+            {{ s.family_last }}, {{ s.family_first }}
+          </a>
+          <div class="text-muted" style="font-size:.78rem">{{ s.family_email }}</div>
+        </td>
+        <td class="text-muted">{{ s.birthday if s.birthday and s.birthday|string != '2999-01-01' else '—' }}</td>
+        <td>{{ s.lang_class or '—' }}</td>
+        <td>{{ s.cult_class or '—' }}</td>
+        <td>{{ s.cult_class2 or '—' }}</td>
+        <td class="text-muted small">
+          {% if s.special_note %}
+          <span title="{{ s.special_note }}">
+            {{ s.special_note[:40] + '…' if s.special_note|length > 40 else s.special_note }}
+          </span>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('admin.edit_student', student_id=s.id, pid=pid, lang=lang_filter, cult=cult_filter) }}"
+             class="btn btn-sm btn-outline-secondary">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-muted text-center py-4">No students found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

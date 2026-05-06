@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Families — MFCS Admin{% endblock %}
+
+{% block navbar %}
+{% include 'admin/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Families
+    <span class="text-muted fs-6 fw-normal">({{ families|length }})</span>
+  </h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.export_families') }}"
+       class="btn btn-sm btn-outline-secondary">↓ CSV</a>
+    <a href="{{ url_for('admin.new_family') }}"
+       class="btn btn-sm btn-admin">+ Add Family</a>
+    <a href="{{ url_for('admin.dashboard') }}"
+       class="btn btn-sm btn-outline-secondary">← Dashboard</a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-3 mb-4">
+  <form class="d-flex gap-3 align-items-end flex-wrap" method="get">
+    <div>
+      <label class="form-label small fw-500 mb-1">School Year</label>
+      <select name="pid" class="form-select form-select-sm" style="width:170px">
+        <option value="" {% if not pid %}selected{% endif %}>— All Families —</option>
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if pid and pid|string == p.id|string %}selected{% endif %}>
+          {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label small fw-500 mb-1">Search</label>
+      <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm"
+             placeholder="Name or email…" style="width:200px">
+    </div>
+    <button class="btn btn-sm btn-admin">Filter</button>
+    {% if q or pid %}
+    <a class="btn btn-sm btn-link text-muted" href="{{ url_for('admin.families') }}">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if pid and not sel_period %}
+<div class="alert alert-warning mt-3">School year not found.</div>
+{% endif %}
+
+<div class="card">
+  <table class="table table-hover mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Family</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th class="text-center">Students</th>
+        {% if sel_period %}
+        <th>{{ sel_period.name }} Status</th>
+        <th class="text-end">Due / Paid</th>
+        {% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in families %}
+      <tr>
+        <td>
+          <a href="{{ url_for('admin.family_detail', fid=f.id) }}"
+             class="text-decoration-none fw-500">
+            {{ f.last_name_0 }}, {{ f.first_name_0 }}
+          </a>
+          {% if f.last_name_1 and f.last_name_1 != '?' %}
+          <span class="text-muted small"> / {{ f.first_name_1 }} {{ f.last_name_1 }}</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">{{ f.primary_email }}</td>
+        <td class="small text-muted">{{ f.primary_phone or '—' }}</td>
+        <td class="text-center">{{ f.student_count }}</td>
+        {% if sel_period %}
+        <td>
+          {% if f.reg_status %}
+          <span class="badge
+            {% if f.reg_status == 'Complete Registration' %}bg-success
+            {% elif f.reg_status == 'Pending' %}bg-warning text-dark
+            {% else %}bg-secondary{% endif %}">
+            {{ f.reg_status }}
+          </span>
+          {% else %}
+          <span class="text-muted small">—</span>
+          {% endif %}
+        </td>
+        <td class="text-end small">
+          {% if f.total_due %}
+          ${{ "%.2f"|format(f.total_due) }} /
+          ${{ "%.2f"|format(f.total_paid or 0) }}
+          {% set balance = (f.total_due or 0)|float - (f.total_paid or 0)|float - (f.adjustment or 0)|float %}
+          {% if balance > 0.01 %}
+          <span class="text-danger">(owe ${{ "%.2f"|format(balance) }})</span>
+          {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        {% endif %}
+        <td>
+          <a href="{{ url_for('admin.family_detail', fid=f.id) }}"
+             class="btn btn-sm btn-outline-secondary">View</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="text-muted text-center py-4">
+          {% if sel_period %}
+            No families registered for {{ sel_period.name }}{% if q %} matching "{{ q }}"{% endif %}.
+          {% else %}
+            No families found{% if q %} matching "{{ q }}"{% endif %}.
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-3">
+  <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+</div>
+{% endblock %}

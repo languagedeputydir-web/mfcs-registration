@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Monmouth Fidelity Chinese School Registration{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background: #f8f9fa; }
+
+    /* ── brand colours ── */
+    :root {
+      --mfcs-red:   #c0392b;
+      --mfcs-gold:  #d4ac0d;
+      --mfcs-dark:  #1a1a2e;
+      --mfcs-admin: #1a1a2e;
+    }
+
+    /* ── family navbar ── */
+    .navbar-family { background: var(--mfcs-red); }
+    .navbar-family .navbar-brand,
+    .navbar-family .nav-link { color: #fff !important; }
+    .navbar-family .nav-link:hover { opacity: .8; }
+
+    /* ── admin navbar ── */
+    .navbar-admin { background: var(--mfcs-admin); }
+    .navbar-admin .navbar-brand,
+    .navbar-admin .nav-link { color: #ccc !important; }
+    .navbar-admin .nav-link:hover { color: #fff !important; }
+
+    /* ── logo ── */
+    .navbar-logo { height: 48px; width: auto; }
+
+    /* ── school name text next to logo ── */
+    .school-name {
+      font-family: 'DM Serif Display', serif;
+      line-height: 1.1;
+    }
+    .school-name .en { font-size: 1rem; }
+    .school-name .zh { font-size: .75rem; opacity: .85; }
+
+    /* ── buttons ── */
+    .btn-family { background: var(--mfcs-red); color: #fff; border: none; }
+    .btn-family:hover { background: #a93226; color: #fff; }
+    .btn-admin  { background: var(--mfcs-admin); color: #fff; border: none; }
+    .btn-admin:hover  { background: #2c2c54; color: #fff; }
+
+    /* ── cards ── */
+    .card {
+      border: 1px solid #dee2e6;
+      border-radius: .5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── flash messages ── */
+    .flash-container { position: sticky; top: 0; z-index: 1050; }
+
+    /* ── page chrome ── */
+    .page-wrapper {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    .fw-500 { font-weight: 500; }
+    .fw-600 { font-weight: 600; }
+    .table th { font-weight: 600; font-size: .85rem; color: #495057; }
+  </style>
+</head>
+<body>
+
+{% block navbar %}{% endblock %}
+
+<!-- flash messages -->
+<div class="flash-container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      {% set bs = 'danger' if category == 'error' else ('warning' if category == 'warning' else ('info' if category == 'info' else 'success')) %}
+      <div class="alert alert-{{ bs }} alert-dismissible mb-0 rounded-0 py-2 px-4" role="alert">
+        {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+</div>
+
+<div class="page-wrapper">
+  {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function togglePw(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const btn = el.nextElementSibling;
+  el.type = el.type === 'password' ? 'text' : 'password';
+  if (btn) btn.textContent = el.type === 'password' ? '👁' : '🙈';
+}
+</script>
+
+</body>
+</html>

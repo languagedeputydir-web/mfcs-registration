@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ family.last_name_0 }} Family — MFCS Admin{% endblock %}
+
+{% block navbar %}
+{% include 'admin/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+  <div>
+    <h2 class="mb-0">{{ family.last_name_0 }}, {{ family.first_name_0 }}
+      {% if family.chinese_name_0 and family.chinese_name_0 != '?' %}
+      <small class="text-muted">{{ family.chinese_name_0 }}</small>
+      {% endif %}
+    </h2>
+    <div class="text-muted small">
+      {{ family.primary_email }}
+      {% if family.primary_phone and family.primary_phone != '?' %}
+       · {{ family.primary_phone }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- Contact card -->
+  <div class="col-md-5">
+    <div class="card p-3 h-100">
+      <h6 class="mb-2">Contact</h6>
+      {% if family.first_name_1 and family.first_name_1 != '?' %}
+      <div class="small"><strong>Guardian 2:</strong> {{ family.first_name_1 }} {{ family.last_name_1 }}</div>
+      {% endif %}
+      {% if family.secondary_email and family.secondary_email != '?' %}
+      <div class="small"><strong>Alt email:</strong> {{ family.secondary_email }}</div>
+      {% endif %}
+      {% if family.secondary_phone and family.secondary_phone != '?' %}
+      <div class="small"><strong>Alt phone:</strong> {{ family.secondary_phone }}</div>
+      {% endif %}
+      {% if family.street_address and family.street_address != '?' %}
+      <div class="small mt-1">
+        {{ family.street_address }},
+        {{ family.city }},
+        {{ family.state or '' }}
+        {{ family.zip }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Students card -->
+  <div class="col-md-7">
+    <div class="card p-3 h-100">
+      <h6 class="mb-2">Students ({{ students|length }})</h6>
+      {% for s in students %}
+      <div class="d-flex align-items-baseline gap-2 small mb-1">
+        <span class="fw-500">{{ s.last_name }}, {{ s.first_name }}</span>
+        {% if s.chinese_name and s.chinese_name != '?' %}
+        <span class="text-muted">{{ s.chinese_name }}</span>
+        {% endif %}
+        {% if s.gender and s.gender != '?' %}
+        <span class="text-muted">({{ s.gender }})</span>
+        {% endif %}
+        {% if s.birthday and s.birthday|string != '2999-01-01' %}
+        <span class="text-muted">b. {{ s.birthday }}</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="text-muted small">No students on file.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Registration history -->
+<h5 class="mb-3">Registration History</h5>
+
+{% if not family_records %}
+<p class="text-muted">No registration records on file.</p>
+{% else %}
+
+{% for fr in family_records %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
+    <strong>{{ fr.period_name }}</strong>
+    <span class="badge {% if fr.reg_status == 'Complete Registration' %}bg-success{% elif fr.reg_status == 'Pending' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+      {{ fr.reg_status }}
+    </span>
+  </div>
+  <div class="card-body p-3">
+    <div class="row g-2 mb-3">
+      <div class="col-auto">
+        <span class="text-muted small">Due:</span>
+        <strong>${{ "%.2f"|format(fr.total_due or 0) }}</strong>
+      </div>
+      <div class="col-auto">
+        <span class="text-muted small">Paid:</span>
+        <strong>${{ "%.2f"|format(fr.total_paid or 0) }}</strong>
+      </div>
+      {% if fr.adjustment %}
+      <div class="col-auto">
+        <span class="text-muted small">Adjustment:</span>
+        <strong>${{ "%.2f"|format(fr.adjustment) }}</strong>
+      </div>
+      {% endif %}
+      {% set balance = (fr.total_due or 0)|float - (fr.total_paid or 0)|float - (fr.adjustment or 0)|float %}
+      {% if balance > 0.01 %}
+      <div class="col-auto">
+        <span class="text-danger small fw-600">Balance: ${{ "%.2f"|format(balance) }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if fr.payment_note and fr.payment_note != '?' %}
+    <div class="small text-muted mb-3">📋 {{ fr.payment_note }}</div>
+    {% endif %}
+
+    <!-- Per-student classes for this period -->
+    {# student_records already filtered in route: only rows with at least one class #}
+    {% set period_students = student_records | selectattr('pid', 'equalto', fr.pid) | list %}
+    {% if period_students %}
+    <table class="table table-sm mb-3">
+      <thead class="table-light">
+        <tr>
+          <th>Student</th>
+          <th>Language</th>
+          <th>Culture 1</th>
+          <th>Culture 2</th>
+          <th class="text-end">Fee</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sr in period_students %}
+        {% set sfee = sr.display_fee or 0 %}
+        <tr>
+          <td class="small">{{ sr.last_name }}, {{ sr.first_name }}</td>
+          <td class="small">{{ sr.lang_class_name or '—' }}</td>
+          <td class="small">{{ sr.cult_class_name or '—' }}</td>
+          <td class="small">{{ sr.cult_class2_name or '—' }}</td>
+          <td class="text-end small">${{ "%.2f"|format(sfee) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Payment update form (only for current period) -->
+    {% if period and fr.pid == period.id %}
+    <hr class="my-2">
+    <h6 class="mb-2 small text-uppercase text-muted" style="letter-spacing:.05em">Update Payment</h6>
+    <form method="post" action="{{ url_for('admin.update_payment') }}">
+      <input type="hidden" name="fpr_id" value="{{ fr.fpr_id }}">
+      <input type="hidden" name="family_id" value="{{ family.id }}">
+      <div class="row g-2 align-items-end mb-2">
+        <div class="col-auto">
+          <label class="form-label small fw-500 mb-1">Status</label>
+          <select name="reg_status" class="form-select form-select-sm">
+            <option value="Pending" {% if fr.reg_status == 'Pending' %}selected{% endif %}>Pending</option>
+            <option value="Complete Registration" {% if fr.reg_status == 'Complete Registration' %}selected{% endif %}>Complete Registration</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <label class="form-label small fw-500 mb-1">Amount Paid ($)</label>
+          <input type="number" name="total_paid" step="0.01" min="0"
+                 class="form-control form-control-sm" style="width:120px"
+                 value="{{ fr.total_paid or '' }}">
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-sm btn-admin">Save</button>
+        </div>
+      </div>
+      <div class="mt-2">
+        <label class="form-label small fw-500 mb-1">Note</label>
+        <textarea name="description" class="form-control form-control-sm" rows="3"
+                  placeholder="Payment notes, cheque number, etc.">{{ fr.payment_note if fr.payment_note and fr.payment_note != '?' else '' }}</textarea>
+      </div>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

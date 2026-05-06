@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if teacher else 'Add' }} Teacher/TA — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">{{ 'Edit Teacher/TA' if teacher else 'Add Teacher / TA / SI' }}</h2>
+  <a href="{{ url_for('admin.staff_list') }}" class="btn btn-outline-secondary btn-sm">← Back to Staff</a>
+</div>
+<div class="card p-4" style="max-width:580px">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label fw-500">School Year *</label>
+      <select name="pid" class="form-select" required>
+        <option value="">— Select —</option>
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if teacher and teacher.pid==p.id %}selected
+          {% elif not teacher and loop.first %}selected{% endif %}>
+          {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-500">Type *</label>
+      <select name="type" class="form-select" required>
+        <option value="Teacher" {% if teacher and teacher.type=='Teacher' %}selected{% endif %}>Teacher</option>
+        <option value="TA"      {% if teacher and teacher.type=='TA'      %}selected{% endif %}>Teaching Assistant (TA)</option>
+  </select>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">First Name *</label>
+        <input type="text" name="first_name" class="form-control" required
+               value="{{ teacher.first_name if teacher and teacher.first_name != '?' else '' }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Last Name *</label>
+        <input type="text" name="last_name" class="form-control" required
+               value="{{ teacher.last_name if teacher and teacher.last_name != '?' else '' }}">
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">Chinese Name</label>
+        <input type="text" name="chinese_name" class="form-control"
+               value="{{ teacher.chinese_name if teacher and teacher.chinese_name != '?' else '' }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Gender</label>
+        <select name="gender" class="form-select">
+          <option value="?">— Select —</option>
+          <option value="M" {% if teacher and teacher.gender=='M' %}selected{% endif %}>Male</option>
+          <option value="F" {% if teacher and teacher.gender=='F' %}selected{% endif %}>Female</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">Phone *</label>
+        <input type="tel" name="phone" class="form-control" required
+               value="{{ teacher.phone if teacher and teacher.phone != '?' else '' }}"
+               placeholder="e.g. 732-555-1234"
+               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Email</label>
+        <input type="email" name="email" class="form-control"
+               value="{{ teacher.email if teacher and teacher.email != '?' else '' }}">
+      </div>
+    </div>
+    <h6 class="text-uppercase text-muted small fw-600 mb-3 mt-3" style="letter-spacing:.05em">Address <span class="text-muted fw-400">(optional)</span></h6>
+    <div class="mb-2">
+      <input type="text" name="street_address" class="form-control" placeholder="Street address"
+             value="{{ teacher.street_address if teacher and teacher.street_address != '?' else '' }}">
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-5"><input type="text" name="city" class="form-control" placeholder="City"
+             value="{{ teacher.city if teacher and teacher.city != '?' else '' }}"></div>
+      <div class="col-3"><input type="text" name="state" class="form-control" placeholder="State" maxlength="2"
+             value="{{ teacher.state or '' }}"></div>
+      <div class="col-4"><input type="text" name="zip" class="form-control" placeholder="ZIP"
+             value="{{ teacher.zip if teacher and teacher.zip != '?' else '' }}"></div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label small fw-500">Notes</label>
+      <textarea name="description" rows="2" class="form-control">{{ teacher.description if teacher and teacher.description != '?' else '' }}</textarea>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-admin px-4">
+        {{ 'Save Changes' if teacher else 'Add Teacher/TA' }}
+      </button>
+      <a href="{{ url_for('admin.staff_list') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit User' if user else 'New User' }} — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<h2 class="mb-4">{{ 'Edit User' if user else 'Add New User' }}</h2>
+<div class="card p-4" style="max-width:480px">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label fw-500">Username <span class="text-danger">*</span></label>
+      <input type="text" name="username" class="form-control {{ 'bg-light' if user }}"
+             required value="{{ user.username if user else '' }}"
+             {{ 'readonly' if user }}>
+      {% if user %}<div class="form-text">Username cannot be changed.</div>{% endif %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-500">Display Name</label>
+      <input type="text" name="display_name" class="form-control"
+             value="{{ user.display_name if user else '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-500">Role <span class="text-danger">*</span></label>
+      <select name="role" class="form-select">
+        {% for r in ['admin','finance','language','culture'] %}
+        <option value="{{ r }}"
+          {% if user and user.role == r %}selected
+          {% elif not user and r == 'finance' %}selected{% endif %}>
+          {{ r | capitalize }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-500">
+        Password
+        {% if user %}<span class="text-muted fw-400">(leave blank to keep current)</span>{% else %}<span class="text-danger">*</span>{% endif %}
+      </label>
+      <div class="input-group"><input type="password" name="password" class="form-control"
+             {{ 'required' if not user }} minlength="8" id="pw_16c253"><button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw_16c253')" tabindex="-1">👁</button></div>
+    </div>
+    {% if user %}
+    <div class="mb-4">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="is_active"
+               id="is_active" {{ 'checked' if user.is_active }}>
+        <label class="form-check-label" for="is_active">Active</label>
+      </div>
+    </div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-admin px-4">
+        {{ 'Save Changes' if user else 'Create User' }}
+      </button>
+      <a href="{{ url_for('admin.users') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

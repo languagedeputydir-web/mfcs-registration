@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if period else 'New' }} School Year — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<h2 class="mb-4">{{ 'Edit School Year' if period else 'Add School Year' }}</h2>
+<div class="card p-4" style="max-width:640px">
+  <form method="post">
+
+    <div class="mb-3">
+      <label class="form-label fw-500">School Year Name <span class="text-danger">*</span></label>
+      <input type="text" name="name" class="form-control" required
+             placeholder="e.g. 2025-2026"
+             value="{{ period.name if period else '' }}">
+    </div>
+
+    <h6 class="text-uppercase text-muted small fw-600 mt-4 mb-3" style="letter-spacing:.05em">
+      Fees
+    </h6>
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Tuition (per student)</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="tuition" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.tuition or 0) if period else '0.00' }}">
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Registration Fee (per family)</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="registration_fee" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.registration_fee or 0) if period else '0.00' }}">
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">PA Duty Deposit (refundable)</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="pa_assignment_deposit" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.pa_assignment_deposit or 0) if period else '0.00' }}">
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">PA Fee</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="pa_fee" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.pa_fee or 0) if period else '0.00' }}">
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Late Fee</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="late_fee" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.late_fee or 0) if period else '0.00' }}">
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Multi-Kid Discount
+          <span class="text-muted fw-400">(per kid beyond 2nd)</span>
+        </label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="discount" step="0.01" min="0" class="form-control"
+                 value="{{ "%.2f"|format(period.discount or 0) if period else '30.00' }}">
+        </div>
+      </div>
+    </div>
+
+    <h6 class="text-uppercase text-muted small fw-600 mt-3 mb-2" style="letter-spacing:.05em">
+      Grandfathered Tuition <span class="text-muted fw-400">(for returning families)</span>
+    </h6>
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Grandfathered Tuition ($)</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text">$</span>
+          <input type="number" name="grandfathered_tuition" step="0.01" min="0"
+                 class="form-control"
+                 value="{{ "%.2f"|format(period.grandfathered_tuition or 0) if period and period.grandfathered_tuition else '' }}"
+                 placeholder="Leave blank if not used">
+        </div>
+        <div class="form-text">If set, existing families pay this rate.</div>
+      </div>
+      <div class="col-6 col-md-4">
+        <label class="form-label small fw-500">Grandfathered Deadline</label>
+        <input type="date" name="grandfathered_deadline" class="form-control form-control-sm"
+               value="{{ period.grandfathered_deadline if period and period.grandfathered_deadline and period.grandfathered_deadline|string != 'None' else '' }}">
+        <div class="form-text">Existing families must register by this date.</div>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label small fw-500">Registration Deadline</label>
+      <input type="date" name="deadline" class="form-control" style="max-width:200px"
+             value="{{ period.deadline if period and period.deadline|string != '2999-01-01' else '' }}">
+    </div>
+
+    <h6 class="text-uppercase text-muted small fw-600 mt-4 mb-3" style="letter-spacing:.05em">
+      Payment Instructions (shown to families)
+    </h6>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label small fw-500">Make check payable to</label>
+        <input type="text" name="check_title" class="form-control"
+               value="{{ period.check_title if period and period.check_title != '?' else '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-500">Attention</label>
+        <input type="text" name="attention" class="form-control"
+               value="{{ period.attention if period and period.attention != '?' else '' }}">
+      </div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-8">
+        <label class="form-label small fw-500">Street Address</label>
+        <input type="text" name="street_address" class="form-control"
+               value="{{ period.street_address if period and period.street_address != '?' else '' }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label small fw-500">City</label>
+        <input type="text" name="city" class="form-control"
+               value="{{ period.city if period and period.city != '?' else '' }}">
+      </div>
+    </div>
+    <div class="row g-2 mb-4">
+      <div class="col-4">
+        <label class="form-label small fw-500">State</label>
+        <input type="text" name="state" class="form-control" maxlength="2"
+               value="{{ period.state or '' }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label small fw-500">ZIP</label>
+        <input type="text" name="zip" class="form-control"
+               value="{{ period.zip if period and period.zip != '?' else '' }}">
+      </div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label small fw-500">Additional Notes</label>
+      <textarea name="description" rows="3" class="form-control">{{ period.description if period and period.description != '?' else '' }}</textarea>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-admin px-4">
+        {{ 'Save Changes' if period else 'Create School Year' }}
+      </button>
+      <a href="{{ url_for('admin.periods') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

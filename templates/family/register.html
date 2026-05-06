@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Register for Classes — Monmouth Fidelity Chinese School{% endblock %}
+
+{% block navbar %}
+{% include 'family/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Class Registration</h2>
+<p class="text-muted mb-1">{{ period.name }}</p>
+
+<!-- Fee info notice -->
+<div class="alert alert-info small mb-4">
+  <strong>Fee information for {{ period.name }}:</strong>
+  <ul class="mb-0 mt-1">
+    <li>Students <strong>under 18</strong>: Tuition
+      <strong>${{ "%.2f"|format(period.tuition or 0) }}</strong>
+      + cultural program fee(s)</li>
+    <li>Students <strong>18 or older</strong>: Cultural program fee(s) only</li>
+    <li>Language program: included in tuition — no extra charge</li>
+    <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
+    <li>Registration fee (per family):
+      <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
+    <li>PA Assignment Duty deposit (refundable, per family):
+      <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+  </ul>
+</div>
+
+{% if not students %}
+<div class="card p-4 text-center text-muted">
+  No students found.
+  <a href="{{ url_for('family.new_student') }}">Add a student first →</a>
+</div>
+{% else %}
+<form method="post"
+      action="{{ url_for('family.submit_registration', period_id=period.id) }}">
+
+  {% for s in students %}
+  {% set ex = existing.get(s.id) %}
+
+  <div class="card p-4 mb-3">
+
+    <!-- Student header -->
+    <div class="mb-3">
+      <h5 class="mb-0">
+        {{ s.last_name }}, {{ s.first_name }}
+        {% if s.chinese_name and s.chinese_name != '?' %}
+        <small class="text-muted">{{ s.chinese_name }}</small>
+        {% endif %}
+        {% if s._is_adult %}
+        <span class="badge bg-secondary ms-1" style="font-size:.75rem">Adult</span>
+        {% endif %}
+      </h5>
+      {% if s.birthday and s.birthday|string not in ('2999-01-01','None') %}
+      <div class="small text-muted">Date of birth: {{ s.birthday }}</div>
+      {% else %}
+      <div class="small text-warning">
+        ⚠ No date of birth on file —
+        <a href="{{ url_for('family.edit_student', student_id=s.id) }}">add it</a>
+        to ensure correct fee calculation.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="row g-3">
+
+      <!-- Language program — minors only -->
+      {% if not s._is_adult %}
+      <div class="col-12 col-md-4">
+        <label class="form-label fw-500">Language Program</label>
+        <select name="lang_{{ s.id }}" class="form-select">
+          <option value="0">— None —</option>
+          {% for lc in lang_classes %}
+          <option value="{{ lc.id }}"
+            {% if ex and ex.lcgrid == lc.id %}selected{% endif %}>
+            {{ lc.name }}
+            {% if lc.chinese_name and lc.chinese_name not in ('?','') %}
+              ({{ lc.chinese_name }})
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Included in tuition.</div>
+      </div>
+      {% endif %}
+
+      <!-- Culture class 1 -->
+      <div class="{% if not s._is_adult %}col-12 col-md-4{% else %}col-12 col-md-6{% endif %}">
+        <label class="form-label fw-500">
+          Cultural Program 1
+        </label>
+        <select name="cult_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
+                id="cult1_{{ s.id }}">
+          <option value="0">— None —</option>
+          {% set cult_list = cult_classes_all if s._is_adult else cult_classes_minor %}
+          {% for cc in cult_list %}
+          <option value="{{ cc.id }}"
+            {% if ex and ex.ccgrid == cc.id %}selected{% endif %}>
+            {{ cc.name }}
+            {% if cc.chinese_name and cc.chinese_name not in ('?','') %}
+              ({{ cc.chinese_name }})
+            {% endif %}
+            {% if cc.fee and cc.fee|float > 0 %}
+              — ${{ "%.0f"|format(cc.fee|float) }}
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Culture class 2 -->
+      <div class="{% if not s._is_adult %}col-12 col-md-4{% else %}col-12 col-md-6{% endif %}">
+        <label class="form-label fw-500">
+          Cultural Program 2
+          <span class="text-muted fw-400 small">(optional)</span>
+        </label>
+        <select name="cult2_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
+                id="cult2_{{ s.id }}">
+          <option value="0">— None —</option>
+          {% set cult_list2 = cult_classes_second if s._is_adult else cult_classes_second_minor %}
+          {% for cc in cult_list2 %}
+          <option value="{{ cc.id }}"
+            {% if ex and ex.ccgrid2 == cc.id %}selected{% endif %}>
+            {{ cc.name }}
+            {% if cc.chinese_name and cc.chinese_name not in ('?','') %}
+              ({{ cc.chinese_name }})
+            {% endif %}
+            {% if cc.fee and cc.fee|float > 0 %}
+              — ${{ "%.0f"|format(cc.fee|float) }}
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Cannot be the same as Cultural Program 1.</div>
+      </div>
+
+    </div><!-- row -->
+  </div><!-- card -->
+  {% endfor %}
+
+  <!-- Family fees reminder -->
+  <div class="card p-3 mb-3 bg-light border-0">
+    <div class="small">
+      Added once for your family:
+      <strong>Registration fee ${{ "%.2f"|format(period.registration_fee or 0) }}</strong>
+      &nbsp;+&nbsp;
+      <strong>PA Assignment Duty deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong>
+      <span class="text-muted">(PA deposit is refundable upon completion of duty)</span>
+    </div>
+  </div>
+
+  <!-- Refund policy -->
+  <div class="card p-3 mb-4" style="border-left:4px solid #ffc107">
+    <div class="small">
+      <strong>Refund Policy:</strong> For new students only, withdrawal within the first
+      4 classes of the school year — 80% refund of tuition only.
+      All other paid fees are non-refundable.
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-family px-4">Submit Registration</button>
+    <a href="{{ url_for('family.dashboard') }}"
+       class="btn btn-outline-secondary">Cancel</a>
+  </div>
+</form>
+{% endif %}
+
+<!-- Culture class 2: disabled until culture class 1 is selected; also prevents duplicate -->
+<script>
+document.querySelectorAll('form select[id^="cult1_"]').forEach(function(sel1) {
+  const sid = sel1.id.replace('cult1_', '');
+  const sel2 = document.getElementById('cult2_' + sid);
+  if (!sel2) return;
+
+  function enforce() {
+    if (!sel1.value || sel1.value === '0') {
+      sel2.value = '0';
+      sel2.disabled = true;
+    } else {
+      sel2.disabled = false;
+      if (sel2.value && sel2.value === sel1.value) {
+        sel2.value = '0';
+      }
+    }
+  }
+
+  sel1.addEventListener('change', enforce);
+  sel2.addEventListener('change', function() {
+    if (!sel1.value || sel1.value === '0') {
+      sel2.value = '0';
+      sel2.disabled = true;
+    } else if (sel2.value === sel1.value) {
+      sel2.value = '0';
+    }
+  });
+
+  // Run on page load
+  enforce();
+});
+</script>
+{% endblock %}

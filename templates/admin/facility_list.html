@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Facilities — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Facilities</h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.new_facility') }}" class="btn btn-admin">+ Add Facility</a>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+  </div>
+</div>
+
+<!-- School year filter -->
+<div class="card p-3 mb-4">
+  <form class="d-flex gap-3 align-items-end flex-wrap" method="get">
+    <div>
+      <label class="form-label small fw-500 mb-1">School Year</label>
+      <select name="pid" class="form-select form-select-sm" style="width:170px">
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if selected_period and selected_period.id==p.id %}selected{% endif %}>
+          {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-sm btn-admin">Filter</button>
+  </form>
+</div>
+
+<div class="card">
+  <table class="table table-hover mb-0 small">
+    <thead class="table-light">
+      <tr>
+        <th>Facility Name</th>
+        <th>Chinese Name</th>
+        <th class="text-center">Max Capacity</th>
+        <th>Description</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in facilities %}
+      <tr>
+        <td class="fw-500">{{ f.name }}</td>
+        <td>{{ f.chinese_name if f.chinese_name != '?' else '—' }}</td>
+        <td class="text-center">
+          {{ f.max_capacity if f.max_capacity and f.max_capacity != -1 else 'Unlimited' }}
+        </td>
+        <td class="text-muted">
+          {{ f.description[:60]+'…' if f.description and f.description != '?' and f.description|length > 60
+             else (f.description if f.description and f.description != '?' else '—') }}
+        </td>
+        <td>
+          <a href="{{ url_for('admin.edit_facility', fid=f.id) }}"
+             class="btn btn-sm btn-outline-secondary">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="text-muted text-center py-4">
+          No facilities found.
+          <a href="{{ url_for('admin.new_facility') }}">Add one →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

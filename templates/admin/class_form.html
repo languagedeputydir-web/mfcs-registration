@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if cls else 'New' }} {{ class_type|capitalize }} Class — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+{% set back_url = url_for('admin.language_classes') if class_type == 'language' else url_for('admin.culture_classes') %}
+{% set action_url = url_for('admin.edit_language_class', cid=cls.id) if (cls and class_type=='language')
+   else url_for('admin.edit_culture_class', cid=cls.id) if (cls and class_type=='culture')
+   else url_for('admin.new_language_class') if class_type=='language'
+   else url_for('admin.new_culture_class') %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">{{ 'Edit' if cls else 'Add New' }} {{ 'Language' if class_type=='language' else 'Culture' }} Class</h2>
+  <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm">← Back to list</a>
+</div>
+
+<div class="card p-4" style="max-width:580px">
+  <form method="post" action="{{ action_url }}">
+    <div class="mb-3">
+      <label class="form-label fw-500">School Year *</label>
+      <select name="pid" class="form-select" required>
+        <option value="">— Select —</option>
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if cls and cls.pid==p.id %}selected{% elif not cls and loop.first %}selected{% endif %}>
+          {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-7">
+        <label class="form-label fw-500">Class Name *</label>
+        <input type="text" name="name" class="form-control" required
+               value="{{ cls.name if cls else '' }}">
+      </div>
+      <div class="col-5">
+        <label class="form-label fw-500">Chinese Name</label>
+        <input type="text" name="chinese_name" class="form-control"
+               value="{{ cls.chinese_name if cls and cls.chinese_name != '?' else '' }}">
+      </div>
+    </div>
+
+    {% if class_type == 'culture' %}
+    <div class="row g-2 mb-3">
+      <div class="col-4">
+        <label class="form-label small fw-500">Class Fee ($)</label>
+        <input type="number" name="fee" step="0.01" min="0" class="form-control"
+               value="{{ "%.2f"|format(cls.fee or 0) if cls else '0.00' }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label small fw-500">Late Fee ($)</label>
+        <input type="number" name="late_fee" step="0.01" min="0" class="form-control"
+               value="{{ "%.2f"|format(cls.late_fee or 0) if cls else '0.00' }}">
+      </div>
+      <div class="col-4">
+        <label class="form-label small fw-500">Discount ($)</label>
+        <input type="number" name="discount" step="0.01" min="0" class="form-control"
+               value="{{ "%.2f"|format(cls.discount or 0) if cls else '0.00' }}">
+      </div>
+    </div>
+    <div class="mb-2">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="allow_as_second"
+               id="allow_as_second"
+               {{ 'checked' if not cls or cls.get('allow_as_second', 1) }}>
+        <label class="form-check-label fw-500" for="allow_as_second">
+          Allow as 2nd cultural program selection
+        </label>
+        <div class="form-text">If unchecked, this class will only appear in the 1st culture slot.</div>
+      </div>
+    </div>
+    <div class="mb-3">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="adult_only"
+               id="adult_only"
+               {{ 'checked' if cls and cls.get('adult_only', 0) }}>
+        <label class="form-check-label fw-500" for="adult_only">
+          Adults only (18+)
+        </label>
+        <div class="form-text">If checked, this class will not be shown to students under 18.</div>
+      </div>
+    </div>
+    {% else %}
+    <input type="hidden" name="fee" value="0">
+    <input type="hidden" name="late_fee" value="0">
+    <input type="hidden" name="discount" value="0">
+    {% endif %}
+
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">Min Size</label>
+        <input type="number" name="min_size" min="1" class="form-control"
+               value="{{ cls.min_size if cls else '1' }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Max Size</label>
+        <input type="number" name="max_size" min="1" class="form-control"
+               value="{{ cls.max_size if cls else '50' }}">
+      </div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label small fw-500">Description / Requirements</label>
+      <textarea name="description" rows="3" class="form-control">{{ cls.description if cls and cls.description not in ('?','') else '' }}</textarea>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-admin px-4">{{ 'Save Changes' if cls else 'Add Class' }}</button>
+      <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancel</a>
+      {% if cls %}
+      <a href="{{ url_for('admin.class_assignments', cgrid=cls.id) }}"
+         class="btn btn-outline-primary ms-auto">👥 Assignments</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

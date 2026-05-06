@@ -1,0 +1,40 @@
+<nav class="navbar navbar-expand-lg navbar-admin px-3">
+  <a class="navbar-brand d-flex align-items-center gap-2 text-decoration-none"
+     href="{{ url_for('admin.dashboard') }}">
+    <img src="{{ url_for('static', filename='img/logo_white.png') }}"
+         alt="MFCS" class="navbar-logo">
+    <div class="school-name" style="color:#fff">
+      <div class="en">Monmouth Fidelity Chinese School</div>
+      <div class="zh">維德孟華中文學校</div>
+    </div>
+  </a>
+  <div class="ms-auto d-flex align-items-center gap-3 flex-wrap">
+    <a class="nav-link" href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+    {% if current_user.is_admin %}
+    <a class="nav-link" href="{{ url_for('admin.periods') }}">School Years</a>
+    <a class="nav-link" href="{{ url_for('admin.users') }}">Users</a>
+    {% endif %}
+    {% if current_user.is_language %}
+    <a class="nav-link" href="{{ url_for('admin.language_classes') }}">Language</a>
+    {% endif %}
+    {% if current_user.is_culture %}
+    <a class="nav-link" href="{{ url_for('admin.culture_classes') }}">Culture</a>
+    {% endif %}
+    {% if current_user.is_language or current_user.is_culture %}
+    <a class="nav-link" href="{{ url_for('admin.staff_list') }}">Teachers/TAs</a>
+    {% endif %}
+    {% if current_user.is_admin or current_user.is_language or current_user.is_culture %}
+    <a class="nav-link" href="{{ url_for('admin.facility_list') }}">Facilities</a>
+    {% endif %}
+    {% if current_user.is_finance %}
+    <a class="nav-link" href="{{ url_for('admin.finance') }}">Finance</a>
+    <a class="nav-link" href="{{ url_for('admin.families') }}">Families</a>
+    {% endif %}
+    <a class="nav-link" href="{{ url_for('admin.students') }}">Students</a>
+    <span class="text-white-50 small border-start ps-3">
+      {{ current_user.display_name }}
+      <span class="badge bg-secondary ms-1" style="font-size:.65rem">{{ current_user.role }}</span>
+    </span>
+    <a class="nav-link text-white-50" href="{{ url_for('admin.logout') }}">Sign out</a>
+  </div>
+</nav>

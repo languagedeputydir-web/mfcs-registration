@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Culture Classes — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Culture Classes</h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.new_culture_class') }}" class="btn btn-admin">+ Add Class</a>
+    <a href="{{ url_for('admin.staff_list') }}" class="btn btn-outline-secondary btn-sm">👤 Teachers/TAs</a>
+    <a href="{{ url_for('admin.facility_list') }}" class="btn btn-outline-secondary btn-sm">🏫 Facilities</a>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+  </div>
+</div>
+
+<div class="d-flex align-items-center gap-2 mb-4">
+  <label class="small fw-500 text-muted mb-0">School Year:</label>
+  <form class="d-flex gap-2" method="get">
+    <select name="pid" class="form-select form-select-sm" style="width:180px"
+            onchange="this.form.submit()">
+      {% for p in periods_list %}
+      <option value="{{ p.id }}"
+        {% if selected_period and selected_period.id == p.id %}selected{% endif %}>
+        {{ p.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if selected_period %}
+<div class="card">
+  <table class="table table-hover mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Class Name</th>
+        <th>Chinese Name</th>
+        <th class="text-end">Fee</th>
+        <th>Teachers</th>
+        <th>TAs</th>
+        <th class="text-center">Students<br><span class="fw-normal text-muted" style="font-size:.7rem">pending / assigned</span></th>
+        <th>Facility</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in classes %}
+      <tr>
+        <td class="fw-500">{{ c.name }}</td>
+        <td class="text-muted">{{ c.chinese_name if c.chinese_name not in ('?','') else '—' }}</td>
+        <td class="text-end">${{ "%.2f"|format(c.fee or 0) }}</td>
+        <td class="small">{{ c.teachers if c.teachers else '—' }}</td>
+        <td class="small">{{ c.tas if c.tas else '—' }}</td>
+        <td class="text-center">
+          <span title="{{ c.pending_count or 0 }} pending, {{ c.student_count or 0 }} assigned">
+            {{ c.pending_count or 0 }}/{{ c.student_count or 0 }}
+          </span>
+        </td>
+        <td class="small text-muted">{{ c.facilities if c.facilities else '—' }}</td>
+        <td>
+          <a href="{{ url_for('admin.class_assignments', cgrid=c.id) }}"
+             class="btn btn-sm btn-outline-primary me-1">Assignments</a>
+          <a href="{{ url_for('admin.edit_culture_class', cid=c.id) }}"
+             class="btn btn-sm btn-outline-secondary me-1">Edit</a>
+          <form method="post" action="{{ url_for('admin.delete_culture_class', cid=c.id) }}" style="display:inline"
+                onsubmit="return confirm('Remove {{ c.name }}? This cannot be undone.')">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="text-muted text-center py-4">
+          No culture classes for {{ selected_period.name }}.
+          <a href="{{ url_for('admin.new_culture_class') }}">Add one →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

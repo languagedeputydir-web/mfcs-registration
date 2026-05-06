@@ -1,0 +1,17 @@
+<nav class="navbar navbar-expand-lg navbar-family px-3">
+  <a class="navbar-brand d-flex align-items-center gap-2 text-decoration-none"
+     href="{{ url_for('family.dashboard') }}">
+    <img src="{{ url_for('static', filename='img/logo_white.png') }}"
+         alt="MFCS" class="navbar-logo">
+    <div class="school-name text-white">
+      <div class="en">Monmouth Fidelity Chinese School</div>
+      <div class="zh">維德孟華中文學校</div>
+    </div>
+  </a>
+  <div class="ms-auto d-flex align-items-center gap-3">
+    <a class="nav-link" href="{{ url_for('family.dashboard') }}">Dashboard</a>
+    <a class="nav-link" href="{{ url_for('family.students') }}">My Students</a>
+    <a class="nav-link" href="{{ url_for('family.profile') }}">My Profile</a>
+    <a class="nav-link text-white-50" href="{{ url_for('family.logout') }}">Sign out</a>
+  </div>
+</nav>

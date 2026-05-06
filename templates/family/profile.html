@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}My Profile — MFCS{% endblock %}
+
+{% block navbar %}
+{% include 'family/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">My Profile</h2>
+  <a href="{{ url_for('family.dashboard') }}" class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+</div>
+
+<div class="card p-4" style="max-width:600px">
+  <form method="post" action="{{ url_for('family.profile') }}">
+
+    <h6 class="mb-3 text-uppercase text-muted small fw-600" style="letter-spacing:.05em">
+      Primary Guardian
+    </h6>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">First Name</label>
+        <input type="text" name="first_name_0" class="form-control"
+               value="{{ family.first_name_0 }}">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Last Name</label>
+        <input type="text" name="last_name_0" class="form-control"
+               value="{{ family.last_name_0 }}">
+      </div>
+    </div>
+
+    <h6 class="mb-3 text-uppercase text-muted small fw-600 mt-4" style="letter-spacing:.05em">
+      Contact
+    </h6>
+    <div class="mb-3">
+      <label class="form-label small fw-500">Primary Email</label>
+      <input type="email" class="form-control bg-light" value="{{ family.primary_email }}"
+             disabled title="Contact the school to change your email address.">
+      <div class="form-text">To change your email, please contact the school office.</div>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">Primary Phone</label>
+        <input type="tel" name="primary_phone" class="form-control"
+               value="{{ family.primary_phone }}"
+               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Secondary Phone</label>
+        <input type="tel" name="secondary_phone" class="form-control"
+               value="{{ family.secondary_phone }}"
+               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label small fw-500">Secondary Email</label>
+      <input type="email" name="secondary_email" class="form-control"
+             value="{{ family.secondary_email }}">
+    </div>
+
+    <h6 class="mb-3 text-uppercase text-muted small fw-600 mt-4" style="letter-spacing:.05em">
+      Address
+      {% if family.address_verified %}
+        <span class="badge bg-success ms-2" style="font-size:.7rem;vertical-align:middle">Verified</span>
+      {% else %}
+        <span class="badge bg-warning text-dark ms-2" style="font-size:.7rem;vertical-align:middle">Required</span>
+      {% endif %}
+    </h6>
+    {% if not family.address_verified %}
+    <div class="alert alert-warning py-2 mb-3">
+      <strong>Action required:</strong> A valid home address is now mandatory.
+      Please fill in your address below and save.
+    </div>
+    {% endif %}
+    <div class="mb-2">
+      <label class="form-label small fw-500">Street Address <span class="text-danger">*</span></label>
+      <input type="text" name="street_address" class="form-control"
+             value="{{ family.street_address }}"
+             placeholder="123 Main St" required
+             {% if not family.address_verified %}autofocus{% endif %}>
+    </div>
+    <div class="row g-2 mb-4">
+      <div class="col-5">
+        <label class="form-label small fw-500">City <span class="text-danger">*</span></label>
+        <input type="text" name="city" class="form-control" value="{{ family.city }}"
+               placeholder="Freehold" required>
+      </div>
+      <div class="col-3">
+        <label class="form-label small fw-500">State <span class="text-danger">*</span></label>
+        <input type="text" name="state" class="form-control"
+               value="{{ family.state or '' }}" maxlength="2"
+               placeholder="NJ" pattern="[A-Za-z]{2}" required>
+      </div>
+      <div class="col-4">
+        <label class="form-label small fw-500">ZIP <span class="text-danger">*</span></label>
+        <input type="text" name="zip" class="form-control" value="{{ family.zip }}"
+               placeholder="07728" pattern="\d{5}(-\d{4})?" inputmode="numeric" required>
+      </div>
+    </div>
+
+    <h6 class="mb-3 text-uppercase text-muted small fw-600" style="letter-spacing:.05em">
+      Change Password <span class="text-muted fw-400">(leave blank to keep current)</span>
+    </h6>
+    <div class="row g-2 mb-4">
+      <div class="col-6">
+        <label class="form-label small fw-500">New Password</label>
+        <div class="input-group"><input type="password" name="new_password" class="form-control"
+               minlength="8" autocomplete="new-password" id="pw_b2176c"><button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw_b2176c')" tabindex="-1">👁</button></div>
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">Confirm Password</label>
+        <div class="input-group"><input type="password" name="confirm_password" class="form-control"
+               minlength="8" autocomplete="new-password" id="pw_ad4b8d"><button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw_ad4b8d')" tabindex="-1">👁</button></div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-family px-4">Save Changes</button>
+    <a href="{{ url_for('family.dashboard') }}"
+       class="btn btn-outline-secondary ms-2">Cancel</a>
+  </form>
+</div>
+{% endblock %}

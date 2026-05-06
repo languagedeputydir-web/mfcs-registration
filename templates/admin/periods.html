@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}School Years — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">School Years / Periods</h2>
+  <a href="{{ url_for('admin.new_period') }}" class="btn btn-admin">+ Add School Year</a>
+</div>
+<div class="card">
+  <table class="table table-hover mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Name</th>
+        <th class="text-end">Tuition</th>
+        <th class="text-end">Reg Fee</th>
+        <th class="text-end">PA Deposit</th>
+        <th class="text-end">Late Fee</th>
+        <th class="text-end">Multi-Kid Discount</th>
+        <th>Deadline</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in periods %}
+      <tr>
+        <td class="fw-500">{{ p.name }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.tuition or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.registration_fee or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.pa_assignment_deposit or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.late_fee or 0) }}</td>
+        <td class="text-end">
+          {% if p.discount and p.discount > 0 %}
+          ${{ "%.2f"|format(p.discount) }} <span class="text-muted small">/kid</span>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">
+          {{ p.deadline if p.deadline and p.deadline|string != '2999-01-01' else '—' }}
+        </td>
+        <td>
+          <a href="{{ url_for('admin.edit_period', pid=p.id) }}"
+             class="btn btn-sm btn-outline-secondary">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-muted text-center py-4">No school years yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}{{ cls.name }} — Assignments{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h2 class="mb-0">{{ cls.name }}
+      {% if cls.chinese_name and cls.chinese_name not in ('?','') %}
+      <small class="text-muted">{{ cls.chinese_name }}</small>{% endif %}
+    </h2>
+    <div class="text-muted small">
+      {{ cls.type | capitalize }} class &nbsp;·&nbsp;
+      <a href="{{ back_url }}">← Back to class list</a>
+    </div>
+  </div>
+</div>
+
+{% for sd in sections %}
+{% set sec = sd.section %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
+    <strong>{{ sec.name }}</strong>
+    <span class="text-muted small">Students: {{ sd.enrolled|length }}</span>
+  </div>
+  <div class="card-body p-3">
+    <div class="row g-4">
+
+      <!-- ── Teacher ── -->
+      <div class="col-md-4">
+        <h6 class="small text-uppercase text-muted fw-600 mb-2" style="letter-spacing:.05em">Teacher</h6>
+        {% set teacher_assigned = sd.teachers | selectattr('teacher_type','equalto','Teacher') | list %}
+        {% if teacher_assigned %}
+          {% for a in teacher_assigned %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge bg-primary">Teacher</span>
+            <span class="small">{{ a.last_name }}, {{ a.first_name }}</span>
+            <form method="post" action="{{ url_for('admin.remove_assignment', crid=sec.id) }}" style="display:inline">
+              <input type="hidden" name="trid" value="{{ a.trid }}">
+              <input type="hidden" name="cgrid" value="{{ cls.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"
+                      onclick="return confirm('Remove?')">✕</button>
+            </form>
+          </div>
+          {% endfor %}
+        {% else %}
+        <p class="small text-muted mb-2">No teacher assigned.</p>
+        {% endif %}
+        {% if all_teachers %}
+        <form method="post" action="{{ url_for('admin.assign_teacher', crid=sec.id) }}" class="d-flex gap-1 mt-2">
+          <input type="hidden" name="cgrid" value="{{ cls.id }}">
+          <select name="trid" class="form-select form-select-sm">
+            <option value="">— Assign teacher —</option>
+            {% for t in all_teachers if t.type == 'Teacher' %}
+            <option value="{{ t.id }}">{{ t.last_name }}, {{ t.first_name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-admin">Add</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <!-- ── TA ── -->
+      <div class="col-md-4">
+        <h6 class="small text-uppercase text-muted fw-600 mb-2" style="letter-spacing:.05em">Teaching Assistant</h6>
+        {% set ta_assigned = sd.teachers | selectattr('teacher_type','equalto','TA') | list %}
+        {% if ta_assigned %}
+          {% for a in ta_assigned %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge bg-success">TA</span>
+            <span class="small">{{ a.last_name }}, {{ a.first_name }}</span>
+            <form method="post" action="{{ url_for('admin.remove_assignment', crid=sec.id) }}" style="display:inline">
+              <input type="hidden" name="trid" value="{{ a.trid }}">
+              <input type="hidden" name="cgrid" value="{{ cls.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"
+                      onclick="return confirm('Remove?')">✕</button>
+            </form>
+          </div>
+          {% endfor %}
+        {% else %}
+        <p class="small text-muted mb-2">No TA assigned.</p>
+        {% endif %}
+        {% if all_teachers %}
+        <form method="post" action="{{ url_for('admin.assign_ta', crid=sec.id) }}" class="d-flex gap-1 mt-2">
+          <input type="hidden" name="cgrid" value="{{ cls.id }}">
+          <select name="trid" class="form-select form-select-sm">
+            <option value="">— Assign TA —</option>
+            {% for t in all_teachers if t.type == 'TA' %}
+            <option value="{{ t.id }}">{{ t.last_name }}, {{ t.first_name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-admin">Add</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <!-- ── Facility ── -->
+      <div class="col-md-4">
+        <h6 class="small text-uppercase text-muted fw-600 mb-2" style="letter-spacing:.05em">Facility / Room</h6>
+        {% if sd.facility %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-secondary">{{ sd.facility.facility_name }}</span>
+          <form method="post" action="{{ url_for('admin.remove_assignment', crid=sec.id) }}" style="display:inline">
+            <input type="hidden" name="facrid" value="{{ sd.facility.facrid }}">
+            <input type="hidden" name="cgrid" value="{{ cls.id }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"
+                    onclick="return confirm('Remove?')">✕</button>
+          </form>
+        </div>
+        {% else %}
+        <p class="small text-muted mb-2">No facility assigned.</p>
+        {% endif %}
+        {% if all_facilities %}
+        <form method="post" action="{{ url_for('admin.assign_facility', crid=sec.id) }}" class="d-flex gap-1 mt-2">
+          <input type="hidden" name="cgrid" value="{{ cls.id }}">
+          <select name="facrid" class="form-select form-select-sm">
+            <option value="">— Assign room —</option>
+            {% for f in all_facilities %}
+            <option value="{{ f.id }}">{{ f.name }}{% if f.max_capacity and f.max_capacity != -1 %} (cap.{{ f.max_capacity }}){% endif %}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-admin">Set</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <!-- ── Students ── -->
+      <div class="col-12">
+        <h6 class="small text-uppercase text-muted fw-600 mb-2" style="letter-spacing:.05em">
+          Students ({{ sd.enrolled|length }})
+        </h6>
+        {% if sd.enrolled %}
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% for s in sd.enrolled %}
+          <div class="d-flex align-items-center gap-1 border rounded px-2 py-1 small">
+            {{ s.last_name }}, {{ s.first_name }}
+            {% if s.chinese_name and s.chinese_name != '?' %}
+            <span class="text-muted">{{ s.chinese_name }}</span>{% endif %}
+            <form method="post" action="{{ url_for('admin.remove_student', crid=sec.id) }}" style="display:inline">
+              <input type="hidden" name="srid" value="{{ s.srid }}">
+              <input type="hidden" name="cgrid" value="{{ cls.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1"
+                      onclick="return confirm('Remove?')">✕</button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if sd.registered_students %}
+        <form method="post" action="{{ url_for('admin.assign_student', crid=sec.id) }}" class="d-flex gap-1">
+          <input type="hidden" name="cgrid" value="{{ cls.id }}">
+          <select name="srid" class="form-select form-select-sm" style="max-width:280px">
+            <option value="">— Add registered student —</option>
+            {% for s in sd.registered_students %}
+            <option value="{{ s.srid }}">{{ s.last_name }}, {{ s.first_name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-admin">Add</button>
+        </form>
+        {% else %}
+        <div class="small text-muted">All registered students assigned, or none registered for this class.</div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card p-4 text-muted text-center">
+  No section found for this class. One should have been created automatically when the class was added.
+</div>
+{% endfor %}
+
+{% endblock %}

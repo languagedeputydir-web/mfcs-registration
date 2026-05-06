@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if facility else 'Add' }} Facility — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">{{ 'Edit Facility' if facility else 'Add Facility' }}</h2>
+  <a href="{{ url_for('admin.facility_list') }}"
+     class="btn btn-outline-secondary btn-sm">← Back to Facilities</a>
+</div>
+<div class="card p-4" style="max-width:480px">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label fw-500">School Year *</label>
+      <select name="pid" class="form-select" required>
+        <option value="">— Select —</option>
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if facility and facility.pid==p.id %}selected
+          {% elif not facility and loop.first %}selected{% endif %}>
+          {{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-7">
+        <label class="form-label fw-500">Facility Name *</label>
+        <input type="text" name="name" class="form-control" required
+               value="{{ facility.name if facility and facility.name != '?' else '' }}"
+               placeholder="e.g. Room 101">
+      </div>
+      <div class="col-5">
+        <label class="form-label fw-500">Chinese Name</label>
+        <input type="text" name="chinese_name" class="form-control"
+               value="{{ facility.chinese_name if facility and facility.chinese_name != '?' else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-500">Max Capacity</label>
+      <input type="number" name="max_capacity" min="-1" class="form-control"
+             style="max-width:120px"
+             value="{{ facility.max_capacity if facility else -1 }}">
+      <div class="form-text">Enter -1 for unlimited.</div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label fw-500">Description / Notes</label>
+      <textarea name="description" rows="2" class="form-control">{{ facility.description if facility and facility.description != '?' else '' }}</textarea>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-admin px-4">
+        {{ 'Save Changes' if facility else 'Add Facility' }}
+      </button>
+      <a href="{{ url_for('admin.facility_list') }}"
+         class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
