@@ -172,7 +172,9 @@ def login():
         row = cur.fetchone()
         conn.close()
         if row:
-            stored = row.get('password_hash') or row.get('password', '')
+            pw_hash = row.get('password_hash', '')
+            pw_plain = row.get('password', '')
+            stored = pw_hash if pw_hash and pw_hash != '?' else pw_plain
             if _check(password, stored):
                 login_user(Family(row), remember=remember)
                 # Redirect to profile if address not yet verified
