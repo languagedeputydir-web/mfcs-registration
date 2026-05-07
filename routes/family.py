@@ -53,10 +53,10 @@ def _send_email(to_addr, subject, text_body, html_body):
             method='POST'
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            print(f'EMAIL DEBUG: sent to {to_addr}, status={resp.status}')
+            print(f'EMAIL DEBUG: sent to {to_addr}, status={resp.status}', flush=True)
         return True
     except Exception as e:
-        print(f'EMAIL ERROR: {e}')
+        print(f'EMAIL ERROR: {e}', flush=True)
         return False
 
 
@@ -235,10 +235,12 @@ def logout():
 def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
+        print(f'FORGOT_PW DEBUG: received request for email={email}', flush=True)
         conn  = get_db_connection()
         cur   = conn.cursor(dictionary=True)
         cur.execute("SELECT id FROM family WHERE LOWER(primary_email) = %s", (email,))
         row = cur.fetchone()
+        print(f'FORGOT_PW DEBUG: row found={row is not None}', flush=True)
         if row:
             token      = secrets.token_urlsafe(32)
             expires_at = datetime.now() + timedelta(hours=2)
