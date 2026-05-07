@@ -29,29 +29,31 @@ from db import get_db_connection
 from models import Family
 
 def _send_email(to_addr, subject, text_body, html_body):
-    """Send an email via SMTP using environment variables."""
+    """Send an email via Brevo API (avoids SMTP port blocking on Railway)."""
+    import urllib.request, json
     try:
-        mail_server   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
-        mail_port     = int(os.environ.get('MAIL_PORT', 587))
-        mail_username = os.environ.get('MAIL_USERNAME', '')
-        mail_password = os.environ.get('MAIL_PASSWORD', '')
-        mail_sender   = os.environ.get('MAIL_SENDER', mail_username)
+        api_key = os.environ.get('MAIL_PASSWORD', '')
+        sender  = os.environ.get('MAIL_SENDER', '')
 
-        print(f'EMAIL DEBUG: server={mail_server}:{mail_port} user={mail_username} sender={mail_sender} to={to_addr}')
+        payload = json.dumps({
+            "sender":      {"name": "Monmouth Fidelity Chinese School", "email": sender},
+            "to":          [{"email": to_addr}],
+            "subject":     subject,
+            "textContent": text_body,
+            "htmlContent": html_body
+        }).encode('utf-8')
 
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From']    = f'Monmouth Fidelity Chinese School <{mail_sender}>'
-        msg['To']      = to_addr
-        msg.attach(MIMEText(text_body, 'plain'))
-        msg.attach(MIMEText(html_body, 'html'))
-
-        with smtplib.SMTP(mail_server, mail_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(mail_username, mail_password)
-            server.sendmail(mail_sender, to_addr, msg.as_string())
-        print(f'EMAIL DEBUG: sent successfully to {to_addr}')
+        req = urllib.request.Request(
+            'https://api.brevo.com/v3/smtp/email',
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'api-key': api_key
+            },
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(f'EMAIL DEBUG: sent to {to_addr}, status={resp.status}')
         return True
     except Exception as e:
         print(f'EMAIL ERROR: {e}')
