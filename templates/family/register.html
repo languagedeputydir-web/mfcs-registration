@@ -16,13 +16,18 @@
     <li>Students <strong>under 18</strong>: Tuition
       <strong>${{ "%.2f"|format(period.tuition or 0) }}</strong>
       + cultural program fee(s)</li>
-    <li>Students <strong>18 or older</strong>: Cultural program fee(s) only</li>
+    <li>Students <strong>18 or older</strong>: Cultural program fee(s) only — no tuition charge</li>
     <li>Language program: included in tuition — no extra charge</li>
     <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
     <li>Registration fee (per family):
       <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
-    <li>PA Assignment Duty deposit (refundable, per family):
+    <li>PA Assignment Duty deposit — refundable (per family):
       <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+    {% if period.discount and period.discount|float > 0 %}
+    <li>Multi-child discount: families with <strong>3 or more children under 18</strong>
+      enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
+      discount per child</strong> for the 3rd child and beyond</li>
+    {% endif %}
   </ul>
 </div>
 
