@@ -444,18 +444,26 @@ def new_teacher():
         import uuid as _uuid, time as _time
         ssn_input = f.get('ssn','').strip()
         ssn_val = ssn_input if ssn_input else f"auto-{_uuid.uuid4().hex}"
-        cur.execute("""INSERT INTO teacher_record
-            (pid,type,last_name,first_name,chinese_name,gender,phone,email,
-             street_address,city,state,zip,ssn,description,status,last_update)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',NOW())""",
-            (pid,stype,last,first,
-             f.get('chinese_name','?'),f.get('gender','?'),phone,
-             f.get('email','?'),f.get('street_address','?'),
-             f.get('city','?'),f.get('state','?'),f.get('zip','?'),
-             ssn_val,f.get('description','?')))
-        conn.commit(); conn.close()
-        flash(f'{stype} {first} {last} added.','success')
-        return redirect(url_for('admin.staff_list', pid=pid))
+        try:
+            cur.execute("""INSERT INTO teacher_record
+                (pid,type,last_name,first_name,chinese_name,gender,phone,email,
+                 street_address,city,state,zip,ssn,description,status,last_update)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',NOW())""",
+                (pid,stype,last,first,
+                 f.get('chinese_name','?'),f.get('gender','?'),phone,
+                 f.get('email','?'),f.get('street_address','?'),
+                 f.get('city','?'),f.get('state','?'),f.get('zip','?'),
+                 ssn_val,f.get('description','?')))
+            conn.commit(); conn.close()
+            flash(f'{stype} {first} {last} added.','success')
+            return redirect(url_for('admin.staff_list', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'{stype} {first} {last} already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding staff: {e}', 'error')
+            return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
     conn.close()
     return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
 
@@ -500,14 +508,22 @@ def new_facility():
         if not pid or not name:
             flash('Period and name are required.','error'); conn.close()
             return render_template('admin/facility_form.html', facility=None, periods_list=plist)
-        cur.execute("""INSERT INTO facility_record
-            (pid,name,chinese_name,max_capacity,description,status,last_update)
-            VALUES(%s,%s,%s,%s,%s,'active',NOW())""",
-            (pid,name,f.get('chinese_name','?'),
-             f.get('max_capacity','-1'),f.get('description','?')))
-        conn.commit(); conn.close()
-        flash(f'Facility "{name}" added.','success')
-        return redirect(url_for('admin.facility_list', pid=pid))
+        try:
+            cur.execute("""INSERT INTO facility_record
+                (pid,name,chinese_name,max_capacity,description,status,last_update)
+                VALUES(%s,%s,%s,%s,%s,'active',NOW())""",
+                (pid,name,f.get('chinese_name','?'),
+                 f.get('max_capacity','-1'),f.get('description','?')))
+            conn.commit(); conn.close()
+            flash(f'Facility "{name}" added.','success')
+            return redirect(url_for('admin.facility_list', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A facility named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding facility: {e}', 'error')
+            return render_template('admin/facility_form.html', facility=None, periods_list=plist)
     conn.close()
     return render_template('admin/facility_form.html', facility=None, periods_list=plist)
 
@@ -940,18 +956,24 @@ def new_language_class():
         if not pid or not name:
             flash('Period and name required.','error'); conn.close()
             return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
-        cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status)
-            VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active')""",
-            (pid,name,f.get('chinese_name','?'),f.get('min_size','1'),f.get('max_size','50'),f.get('description','?')))
-        cgrid = cur.lastrowid
-        cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
-            VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid,))
-        conn.commit(); conn.close()
-        flash(f'Language class "{name}" added.','success')
-        return redirect(url_for('admin.language_classes', pid=pid))
-    conn.close()
-    return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
+        try:
+            cur.execute("""INSERT INTO class_group_record
+                (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status)
+                VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active')""",
+                (pid,name,f.get('chinese_name','?'),f.get('min_size','1'),f.get('max_size','50'),f.get('description','?')))
+            cgrid = cur.lastrowid
+            cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
+                VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid,))
+            conn.commit(); conn.close()
+            flash(f'Language class "{name}" added.','success')
+            return redirect(url_for('admin.language_classes', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A language class named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding class: {e}', 'error')
+            return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
 
 @admin_bp.route('/language/<int:cid>/edit', methods=['GET','POST'])
 @roles_required('admin','language')
@@ -1029,20 +1051,26 @@ def new_culture_class():
             return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
         allow2 = 1 if f.get('allow_as_second') else 0
         adult_only = 1 if f.get('adult_only') else 0
-        cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,adult_only)
-            VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s)""",
-            (pid,name,f.get('chinese_name','?'),f.get('fee','0'),
-             f.get('late_fee','0'),f.get('discount','0'),
-             f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),adult_only))
-        cgrid2 = cur.lastrowid
-        cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
-            VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid2,))
-        conn.commit(); conn.close()
-        flash(f'Culture class "{name}" added.','success')
-        return redirect(url_for('admin.culture_classes', pid=pid))
-    conn.close()
-    return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
+        try:
+            cur.execute("""INSERT INTO class_group_record
+                (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,adult_only)
+                VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s)""",
+                (pid,name,f.get('chinese_name','?'),f.get('fee','0'),
+                 f.get('late_fee','0'),f.get('discount','0'),
+                 f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),adult_only))
+            cgrid2 = cur.lastrowid
+            cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
+                VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid2,))
+            conn.commit(); conn.close()
+            flash(f'Culture class "{name}" added.','success')
+            return redirect(url_for('admin.culture_classes', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A culture class named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding class: {e}', 'error')
+            return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
 
 @admin_bp.route('/culture/<int:cid>/edit', methods=['GET','POST'])
 @roles_required('admin','culture')

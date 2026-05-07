@@ -743,11 +743,15 @@ def submit_registration(period_id):
                 (lid, cid, cid2, existing['id'])
             )
         elif lid or cid or cid2:
-            cur.execute(
-                "INSERT INTO student_record (sid, pid, lcgrid, ccgrid, ccgrid2) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (sid, period_id, lid, cid, cid2)
-            )
+            try:
+                cur.execute(
+                    "INSERT INTO student_record (sid, pid, lcgrid, ccgrid, ccgrid2) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (sid, period_id, lid, cid, cid2)
+                )
+            except Exception as e:
+                if '1062' not in str(e) and 'Duplicate' not in str(e):
+                    raise
 
     # Total = student fees + registration fee + PA deposit - multi-kid discount
     total_due = _calc_total_family_fee(student_subtotal, period, minor_count)
