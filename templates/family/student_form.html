@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
                value="1" {% if student and student.media_consent == 1 %}checked{% endif %}
                required>
         <label class="form-check-label fw-600" for="media_optin">
-          ☑ OPT-IN (I Consent)
+          OPT-IN (I Consent)
         </label>
       </div>
       <div class="small text-muted" style="padding-left:1.5rem">
@@ -138,21 +138,31 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <div class="card border mb-4 p-3">
+    <div class="card border mb-3 p-3">
       <div class="form-check">
         <input class="form-check-input" type="radio" name="media_consent" id="media_optout"
                value="0" {% if student and student.media_consent == 0 %}checked{% endif %}>
         <label class="form-check-label fw-600" for="media_optout">
-          ☒ OPT-OUT (I Do Not Consent)
+          OPT-OUT (I Do Not Consent)
         </label>
       </div>
       <div class="small text-muted mt-2" style="padding-left:1.5rem">
         I do not give my permission to MONMOUTH FIDELITY CHINESE SCHOOL, its entities, or
         third parties to make, reproduce, broadcast, or publish any video, film, footage,
         audio recordings, or photographs of me or my child. I understand that by checking
-        this box, my/my child's image and voice will be excluded from promotional materials,
-        school publications, social media, and public exhibitions.
+        this box, my/my child's image and voice will not be posted by the school to official
+        websites, Facebook, or any other school-managed social media platforms or publications.
       </div>
+    </div>
+
+    <div class="alert alert-warning small mb-4" role="alert">
+      <strong>IMPORTANT NOTICE REGARDING OPEN EVENTS</strong> (Applies to all students, regardless of selection above):<br>
+      Monmouth Fidelity Chinese School respects your privacy and will strictly adhere to your choice above
+      regarding the posting of media on our official platforms. However, please be aware that during open
+      or public school events, third parties (such as other parents, guests, or outside organizations) may
+      take photographs or videos. Monmouth Fidelity Chinese School has no control over the actions of third
+      parties and assumes no responsibility or liability for how they may use, publish, or distribute any
+      images or recordings taken during these open events.
     </div>
 
     <div class="d-flex gap-2">
