@@ -11,7 +11,11 @@ Family-level fees added once per registration:
   + period.registration_fee   (one-time per family per period)
   + period.pa_assignment_deposit  (refundable PA duty deposit)
 """
+import os
 import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, date
 
 from flask import (Blueprint, render_template, redirect, url_for,
@@ -23,6 +27,33 @@ from address_helpers import address_is_valid
 
 from db import get_db_connection
 from models import Family
+
+def _send_email(to_addr, subject, text_body, html_body):
+    """Send an email via SMTP using environment variables."""
+    try:
+        mail_server   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
+        mail_port     = int(os.environ.get('MAIL_PORT', 587))
+        mail_username = os.environ.get('MAIL_USERNAME', '')
+        mail_password = os.environ.get('MAIL_PASSWORD', '')
+        mail_sender   = os.environ.get('MAIL_SENDER', mail_username)
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From']    = f'Monmouth Fidelity Chinese School <{mail_sender}>'
+        msg['To']      = to_addr
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+
+        with smtplib.SMTP(mail_server, mail_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(mail_username, mail_password)
+            server.sendmail(mail_sender, to_addr, msg.as_string())
+        return True
+    except Exception as e:
+        print(f'Email error: {e}')
+        return False
+
 
 family_bp = Blueprint('family', __name__)
 
@@ -201,9 +232,7 @@ def forgot_password():
         email = request.form.get('email', '').strip().lower()
         conn  = get_db_connection()
         cur   = conn.cursor(dictionary=True)
-        cur.execute(
-            "SELECT id FROM family WHERE LOWER(primary_email) = %s", (email,)
-        )
+        cur.execute("SELECT id FROM family WHERE LOWER(primary_email) = %s", (email,))
         row = cur.fetchone()
         if row:
             token      = secrets.token_urlsafe(32)
@@ -213,7 +242,29 @@ def forgot_password():
                 "VALUES (%s, %s, %s)", (row['id'], token, expires_at)
             )
             conn.commit()
-            # TODO: send_email(email, url_for('family.reset_password', token=token, _external=True))
+            reset_url = url_for('family.reset_password', token=token, _external=True)
+            _send_email(
+                to_addr=email,
+                subject='MFCS — Password Reset Request',
+                text_body=(
+                    f"Hello,\n\nWe received a request to reset your password "
+                    f"for your MFCS family account.\n\n"
+                    f"Click the link below to reset your password (valid for 2 hours):\n"
+                    f"{reset_url}\n\n"
+                    f"If you did not request a password reset, please ignore this email.\n\n"
+                    f"Monmouth Fidelity Chinese School"
+                ),
+                html_body=(
+                    f"<p>Hello,</p>"
+                    f"<p>We received a request to reset your password for your MFCS family account.</p>"
+                    f"<p style='text-align:center;margin:24px 0'>"
+                    f"<a href='{reset_url}' style='background:#c0392b;color:#fff;padding:12px 28px;"
+                    f"border-radius:6px;text-decoration:none;font-weight:bold'>Reset My Password</a></p>"
+                    f"<p>Or copy this link: <a href='{reset_url}'>{reset_url}</a></p>"
+                    f"<p>If you did not request this, please ignore this email.</p>"
+                    f"<p>Monmouth Fidelity Chinese School</p>"
+                )
+            )
         conn.close()
         flash('If that email is on file you will receive a reset link shortly.', 'info')
         return redirect(url_for('family.login'))
@@ -742,6 +793,61 @@ def submit_registration(period_id):
 
     conn.commit()
     conn.close()
+
+    # Send registration confirmation email
+    try:
+        cur2 = get_db_connection().cursor(dictionary=True)
+        cur2.execute("""
+            SELECT sr.*, s.first_name, s.last_name,
+                   lc.name AS lang_class, cc.name AS cult_class, cc2.name AS cult_class2
+            FROM student_record sr
+            JOIN student s ON s.id = sr.sid
+            LEFT JOIN class_group_record lc  ON lc.id  = sr.lcgrid
+            LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+            LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+            WHERE sr.pid = %s AND s.fid = %s
+        """, (period_id, current_user.id))
+        reg_rows = cur2.fetchall()
+
+        student_lines_text = ''
+        student_lines_html = ''
+        for r in reg_rows:
+            name = f"{r['last_name']}, {r['first_name']}"
+            lang = r['lang_class'] or '—'
+            cult = r['cult_class'] or '—'
+            cult2 = r['cult_class2'] or '—'
+            student_lines_text += f"  • {name}: Language: {lang} | Culture 1: {cult} | Culture 2: {cult2}\n"
+            student_lines_html += (f"<tr><td>{name}</td><td>{lang}</td>"
+                                   f"<td>{cult}</td><td>{cult2}</td></tr>")
+
+        _send_email(
+            to_addr=current_user.primary_email,
+            subject=f'MFCS — Registration Confirmation ({period["name"]})',
+            text_body=(
+                f"Dear {current_user.first_name_0} {current_user.last_name_0},\n\n"
+                f"Thank you! Your registration for {period['name']} has been saved.\n\n"
+                f"Students registered:\n{student_lines_text}\n"
+                f"Total Due: ${total_due:.2f}\n\n"
+                f"Please log in to your account to view your fee summary and payment details.\n\n"
+                f"Monmouth Fidelity Chinese School"
+            ),
+            html_body=(
+                f"<p>Dear {current_user.first_name_0} {current_user.last_name_0},</p>"
+                f"<p>Thank you! Your registration for <strong>{period['name']}</strong> has been saved.</p>"
+                f"<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>"
+                f"<tr style='background:#f0f0f0'><th>Student</th><th>Language</th>"
+                f"<th>Culture 1</th><th>Culture 2</th></tr>"
+                f"{student_lines_html}"
+                f"</table>"
+                f"<p><strong>Total Due: ${total_due:.2f}</strong></p>"
+                f"<p>Please log in to your account to view your fee summary and payment details.</p>"
+                f"<p>Monmouth Fidelity Chinese School</p>"
+            )
+        )
+        cur2.close()
+    except Exception as e:
+        print(f'Confirmation email error: {e}')
+
     return redirect(url_for('family.fee_summary', period_id=period_id))
 
 

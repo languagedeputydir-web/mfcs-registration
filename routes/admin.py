@@ -2,7 +2,9 @@
 routes/admin.py  — full admin portal
 Roles: admin | finance | language | culture
 """
-import csv, io
+import os, csv, io, smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from functools import wraps
 from flask import (Blueprint, render_template, redirect, url_for,
                    request, flash, Response)
@@ -12,6 +14,30 @@ from db import get_db_connection
 from models import Admin
 
 admin_bp = Blueprint('admin', __name__)
+
+
+def _send_email(to_addr, subject, text_body, html_body):
+    """Send an email via SMTP using environment variables."""
+    try:
+        mail_server   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
+        mail_port     = int(os.environ.get('MAIL_PORT', 587))
+        mail_username = os.environ.get('MAIL_USERNAME', '')
+        mail_password = os.environ.get('MAIL_PASSWORD', '')
+        mail_sender   = os.environ.get('MAIL_SENDER', mail_username)
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From']    = f'Monmouth Fidelity Chinese School <{mail_sender}>'
+        msg['To']      = to_addr
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
+        with smtplib.SMTP(mail_server, mail_port) as server:
+            server.ehlo(); server.starttls()
+            server.login(mail_username, mail_password)
+            server.sendmail(mail_sender, to_addr, msg.as_string())
+        return True
+    except Exception as e:
+        print(f'Email error: {e}')
+        return False
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -1191,21 +1217,74 @@ def new_family():
 @admin_bp.route('/payment/update', methods=['POST'])
 @roles_required('admin','finance')
 def update_payment():
-    fpr_id=request.form.get('fpr_id'); family_id=request.form.get('family_id')
-    reg_status=request.form.get('reg_status','').strip()
-    total_paid=request.form.get('total_paid','').strip()
-    note=request.form.get('description','').strip()
-    conn=get_db_connection(); cur=conn.cursor()
-    updates=["last_update=NOW()"]; params=[]
+    fpr_id    = request.form.get('fpr_id')
+    family_id = request.form.get('family_id')
+    reg_status= request.form.get('reg_status','').strip()
+    total_paid= request.form.get('total_paid','').strip()
+    note      = request.form.get('description','').strip()
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get previous status before updating
+    cur.execute("SELECT reg_status, total_due, total_paid FROM family_record WHERE id=%s", (int(fpr_id),))
+    fpr_before = cur.fetchone()
+    old_status = (fpr_before or {}).get('reg_status', '')
+
+    cur2 = conn.cursor()
+    updates = ["last_update=NOW()"]; params = []
     if reg_status: updates.append("reg_status=%s"); params.append(reg_status)
     if total_paid:
         try: updates.append("total_paid=%s"); params.append(float(total_paid))
         except: pass
     updates.append("description=%s"); params.append(note)
     params.append(int(fpr_id))
-    cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s",params)
+    cur2.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
+    conn.commit()
+
+    # Send confirmation email if status changed to Complete Registration
+    if reg_status == 'Complete Registration' and old_status != 'Complete Registration':
+        try:
+            cur.execute("SELECT primary_email, first_name_0, last_name_0 FROM family WHERE id=%s", (int(family_id),))
+            family = cur.fetchone()
+            if family:
+                cur.execute("""
+                    SELECT fr.total_due, fr.total_paid, p.name AS period_name
+                    FROM family_record fr JOIN period p ON p.id = fr.pid
+                    WHERE fr.id = %s
+                """, (int(fpr_id),))
+                fpr = cur.fetchone()
+                if fpr and family.get('primary_email'):
+                    _send_email(
+                        to_addr=family['primary_email'],
+                        subject='MFCS — Payment Confirmed & Registration Complete',
+                        text_body=(
+                            f"Dear {family['first_name_0']} {family['last_name_0']},\n\n"
+                            f"Your payment has been confirmed and your registration "
+                            f"for {fpr['period_name']} is now complete.\n\n"
+                            f"Total Paid: ${float(fpr['total_paid'] or 0):.2f}\n"
+                            f"Total Due:  ${float(fpr['total_due'] or 0):.2f}\n\n"
+                            f"Thank you for registering with Monmouth Fidelity Chinese School.\n\n"
+                            f"Monmouth Fidelity Chinese School"
+                        ),
+                        html_body=(
+                            f"<p>Dear {family['first_name_0']} {family['last_name_0']},</p>"
+                            f"<p>Your payment has been confirmed and your registration for "
+                            f"<strong>{fpr['period_name']}</strong> is now complete.</p>"
+                            f"<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse'>"
+                            f"<tr><td><strong>Total Paid</strong></td><td>${float(fpr['total_paid'] or 0):.2f}</td></tr>"
+                            f"<tr><td><strong>Total Due</strong></td><td>${float(fpr['total_due'] or 0):.2f}</td></tr>"
+                            f"</table>"
+                            f"<p>Thank you for registering with Monmouth Fidelity Chinese School. "
+                            f"We look forward to seeing your family!</p>"
+                            f"<p>Monmouth Fidelity Chinese School</p>"
+                        )
+                    )
+        except Exception as e:
+            print(f'Payment confirmation email error: {e}')
+
+    conn.close()
     pid = request.form.get('pid','')
-    conn.commit(); conn.close(); flash('Payment updated.','success')
+    flash('Payment updated.', 'success')
     return redirect(url_for('admin.finance', pid=pid) if pid else url_for('admin.finance'))
 
 # ══ STUDENTS ══════════════════════════════════════════════════════════════════
