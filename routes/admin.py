@@ -974,6 +974,8 @@ def new_language_class():
             else:
                 flash(f'Error adding class: {e}', 'error')
             return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
+    conn.close()
+    return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
 
 @admin_bp.route('/language/<int:cid>/edit', methods=['GET','POST'])
 @roles_required('admin','language')
@@ -1071,6 +1073,8 @@ def new_culture_class():
             else:
                 flash(f'Error adding class: {e}', 'error')
             return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
+    conn.close()
+    return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
 
 @admin_bp.route('/culture/<int:cid>/edit', methods=['GET','POST'])
 @roles_required('admin','culture')
