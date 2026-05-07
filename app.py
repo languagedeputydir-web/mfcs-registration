@@ -55,6 +55,12 @@ def create_app():
     app.register_blueprint(family_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
 
+    # Redirect root URL to family login
+    from flask import redirect, url_for
+    @app.route('/')
+    def index():
+        return redirect(url_for('family.login'))
+
     return app
 
 
