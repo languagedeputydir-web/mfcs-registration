@@ -37,6 +37,8 @@ def _send_email(to_addr, subject, text_body, html_body):
         mail_password = os.environ.get('MAIL_PASSWORD', '')
         mail_sender   = os.environ.get('MAIL_SENDER', mail_username)
 
+        print(f'EMAIL DEBUG: server={mail_server}:{mail_port} user={mail_username} sender={mail_sender} to={to_addr}')
+
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From']    = f'Monmouth Fidelity Chinese School <{mail_sender}>'
@@ -49,9 +51,10 @@ def _send_email(to_addr, subject, text_body, html_body):
             server.starttls()
             server.login(mail_username, mail_password)
             server.sendmail(mail_sender, to_addr, msg.as_string())
+        print(f'EMAIL DEBUG: sent successfully to {to_addr}')
         return True
     except Exception as e:
-        print(f'Email error: {e}')
+        print(f'EMAIL ERROR: {e}')
         return False
 
 
