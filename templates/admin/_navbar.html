@@ -31,10 +31,12 @@
     <a class="nav-link" href="{{ url_for('admin.families') }}">Families</a>
     {% endif %}
     <a class="nav-link" href="{{ url_for('admin.students') }}">Students</a>
-    <span class="text-white-50 small border-start ps-3">
-      {{ current_user.display_name }}
+    <a class="nav-link text-white-50 small border-start ps-3"
+       href="{{ url_for('admin.my_profile') }}"
+       style="text-decoration:none">
+      {{ current_user.display_name or current_user.username }}
       <span class="badge bg-secondary ms-1" style="font-size:.65rem">{{ current_user.role }}</span>
-    </span>
+    </a>
     <a class="nav-link text-white-50" href="{{ url_for('admin.logout') }}">Sign out</a>
   </div>
 </nav>

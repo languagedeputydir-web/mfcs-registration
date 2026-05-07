@@ -320,6 +320,42 @@ def edit_user(uid):
     conn.close()
     return render_template('admin/user_form.html', user=user)
 
+@admin_bp.route('/my-profile', methods=['GET', 'POST'])
+@login_required
+def my_profile():
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM admins WHERE id=%s", (current_user.id,))
+    user = cur.fetchone()
+    if not user:
+        conn.close()
+        flash('Profile not found.', 'error')
+        return redirect(url_for('admin.dashboard'))
+    if request.method == 'POST':
+        display_name = request.form.get('display_name', '').strip()
+        new_password = request.form.get('new_password', '').strip()
+        confirm_pw   = request.form.get('confirm_password', '').strip()
+        if new_password:
+            if new_password != confirm_pw:
+                flash('Passwords do not match.', 'error')
+                conn.close()
+                return redirect(url_for('admin.my_profile'))
+            if len(new_password) < 8:
+                flash('Password must be at least 8 characters.', 'error')
+                conn.close()
+                return redirect(url_for('admin.my_profile'))
+            cur.execute("UPDATE admins SET display_name=%s, password_hash=%s WHERE id=%s",
+                (display_name, _hash(new_password), current_user.id))
+        else:
+            cur.execute("UPDATE admins SET display_name=%s WHERE id=%s",
+                (display_name, current_user.id))
+        conn.commit(); conn.close()
+        flash('Profile updated successfully.', 'success')
+        return redirect(url_for('admin.my_profile'))
+    conn.close()
+    return render_template('admin/my_profile.html', user=user)
+
+
+@admin_bp.route('/users/<int:uid>/delete', methods=['POST'])
 @admin_bp.route('/users/<int:uid>/delete', methods=['POST'])
 @roles_required('admin')
 def delete_user(uid):

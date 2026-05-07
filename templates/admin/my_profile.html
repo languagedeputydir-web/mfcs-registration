@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}My Profile — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+{% block content %}
+
+<div style="max-width:520px">
+  <h2 class="mb-4">My Profile</h2>
+
+  <div class="card p-4">
+    <form method="post">
+
+      <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">
+        Account Info
+      </h6>
+
+      <div class="mb-3">
+        <label class="form-label small fw-500">Username</label>
+        <input type="text" class="form-control" value="{{ user.username }}" disabled>
+        <div class="form-text">Username cannot be changed.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small fw-500">Role</label>
+        <input type="text" class="form-control"
+               value="{{ user.role | capitalize }}" disabled>
+        <div class="form-text">Role can only be changed by an admin.</div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label small fw-500">Display Name</label>
+        <input type="text" name="display_name" class="form-control"
+               value="{{ user.display_name or '' }}"
+               placeholder="Your name as shown in the system">
+      </div>
+
+      <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">
+        Change Password
+        <span class="text-muted fw-normal" style="font-size:.8rem">(leave blank to keep current)</span>
+      </h6>
+
+      <div class="mb-3">
+        <label class="form-label small fw-500">New Password</label>
+        <input type="password" name="new_password" class="form-control"
+               minlength="8" autocomplete="new-password"
+               placeholder="At least 8 characters">
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label small fw-500">Confirm New Password</label>
+        <input type="password" name="confirm_password" class="form-control"
+               minlength="8" autocomplete="new-password">
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-admin px-4">Save Changes</button>
+        <a href="{{ url_for('admin.dashboard') }}"
+           class="btn btn-outline-secondary">Cancel</a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}
