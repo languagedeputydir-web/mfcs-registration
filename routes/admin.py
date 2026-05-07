@@ -439,10 +439,11 @@ def new_teacher():
             flash('Phone number must contain at least 7 digits.','error')
             conn.close()
             return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
-        # ssn is part of the legacy unique key 'trkey' (pid, ssn)
-        # Use a unique placeholder so the constraint is never violated
-        import uuid as _uuid
-        ssn_val = f.get('ssn','').strip() or _uuid.uuid4().hex[:12]
+        # trkey unique constraint is on (pid, ssn)
+        # If no SSN provided, generate a guaranteed-unique placeholder
+        import uuid as _uuid, time as _time
+        ssn_input = f.get('ssn','').strip()
+        ssn_val = ssn_input if ssn_input else f"auto-{_uuid.uuid4().hex}"
         cur.execute("""INSERT INTO teacher_record
             (pid,type,last_name,first_name,chinese_name,gender,phone,email,
              street_address,city,state,zip,ssn,description,status,last_update)
