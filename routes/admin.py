@@ -439,11 +439,19 @@ def new_teacher():
             flash('Phone number must contain at least 7 digits.','error')
             conn.close()
             return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
-        # trkey unique constraint is on (pid, ssn)
-        # If no SSN provided, generate a guaranteed-unique placeholder
-        import uuid as _uuid, time as _time
-        ssn_input = f.get('ssn','').strip()
-        ssn_val = ssn_input if ssn_input else f"auto-{_uuid.uuid4().hex}"
+        # Check for duplicate name+type in this period
+        cur.execute(
+            "SELECT id FROM teacher_record WHERE pid=%s AND type=%s AND last_name=%s AND first_name=%s",
+            (pid, stype, last, first)
+        )
+        if cur.fetchone():
+            conn.close()
+            flash(f'{stype} {first} {last} already exists for this school year.', 'error')
+            return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
+
+        import uuid as _uuid
+        ssn_val = f.get('ssn','').strip() or f"auto-{_uuid.uuid4().hex}"
+        email_val = f.get('email','').strip() or '?'
         try:
             cur.execute("""INSERT INTO teacher_record
                 (pid,type,last_name,first_name,chinese_name,gender,phone,email,
@@ -451,7 +459,7 @@ def new_teacher():
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',NOW())""",
                 (pid,stype,last,first,
                  f.get('chinese_name','?'),f.get('gender','?'),phone,
-                 f.get('email','?'),f.get('street_address','?'),
+                 email_val,f.get('street_address','?'),
                  f.get('city','?'),f.get('state','?'),f.get('zip','?'),
                  ssn_val,f.get('description','?')))
             conn.commit(); conn.close()
@@ -459,10 +467,7 @@ def new_teacher():
             return redirect(url_for('admin.staff_list', pid=pid))
         except Exception as e:
             conn.close()
-            if '1062' in str(e) or 'Duplicate' in str(e):
-                flash(f'{stype} {first} {last} already exists for this school year.', 'error')
-            else:
-                flash(f'Error adding staff: {e}', 'error')
+            flash(f'Error adding staff: {e}', 'error')
             return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
     conn.close()
     return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
