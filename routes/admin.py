@@ -940,8 +940,8 @@ def new_language_class():
             flash('Period and name required.','error'); conn.close()
             return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
         cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,allow_as_second)
-            VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active',0)""",
+            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status)
+            VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active')""",
             (pid,name,f.get('chinese_name','?'),f.get('min_size','1'),f.get('max_size','50'),f.get('description','?')))
         cgrid = cur.lastrowid
         cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
@@ -1029,11 +1029,11 @@ def new_culture_class():
         allow2 = 1 if f.get('allow_as_second') else 0
         adult_only = 1 if f.get('adult_only') else 0
         cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,allow_as_second,adult_only)
-            VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s,%s)""",
+            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,adult_only)
+            VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s)""",
             (pid,name,f.get('chinese_name','?'),f.get('fee','0'),
              f.get('late_fee','0'),f.get('discount','0'),
-             f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),allow2,adult_only))
+             f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),adult_only))
         cgrid2 = cur.lastrowid
         cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
             VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid2,))
@@ -1055,11 +1055,11 @@ def edit_culture_class(cid):
         adult_only2 = 1 if f.get('adult_only') else 0
         cur.execute("""UPDATE class_group_record SET pid=%s,name=%s,chinese_name=%s,
             fee=%s,misc_fee=0,late_fee=%s,discount=%s,min_size=%s,max_size=%s,
-            description=%s,allow_as_second=%s,adult_only=%s WHERE id=%s""",
+            description=%s,adult_only=%s WHERE id=%s""",
             (f.get('pid'),f.get('name',''),f.get('chinese_name','?'),
              f.get('fee','0'),f.get('late_fee','0'),f.get('discount','0'),
              f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),
-             allow2,adult_only2,cid))
+             adult_only2,cid))
         conn.commit(); conn.close(); flash('Culture class updated.','success')
         return redirect(url_for('admin.culture_classes', pid=cls['pid']))
     conn.close()

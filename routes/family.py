@@ -376,7 +376,8 @@ def register_account():
 @family_bp.route('/dashboard')
 @login_required
 def dashboard():
-    if not current_user.address_verified:
+    from models import Family
+    if isinstance(current_user, Family) and not current_user.address_verified:
         flash('Please update your home address before continuing.', 'warning')
         return redirect(url_for('family.profile'))
     conn = get_db_connection()
