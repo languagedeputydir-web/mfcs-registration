@@ -50,7 +50,7 @@
       <div class="col-6">
         <label class="form-label small fw-500">Secondary Phone</label>
         <input type="tel" name="secondary_phone" class="form-control"
-               value="{{ family.secondary_phone }}"
+               value="{{ family.secondary_phone if family.secondary_phone and family.secondary_phone != '?' else '' }}"
                pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
                title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
       </div>
@@ -58,7 +58,7 @@
     <div class="mb-3">
       <label class="form-label small fw-500">Secondary Email</label>
       <input type="email" name="secondary_email" class="form-control"
-             value="{{ family.secondary_email }}">
+             value="{{ family.secondary_email if family.secondary_email and family.secondary_email != '?' else '' }}">
     </div>
 
     <h6 class="mb-3 text-uppercase text-muted small fw-600 mt-4" style="letter-spacing:.05em">
