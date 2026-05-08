@@ -95,6 +95,9 @@ def _age(birthday):
         return None
 
 def _is_adult(student):
+    # Use explicit is_adult flag if set, otherwise fall back to birthday
+    if student.get('is_adult') is not None and student.get('is_adult') != '':
+        return bool(int(student.get('is_adult', 0)))
     return _age(student.get('birthday')) is not None and \
            _age(student.get('birthday')) >= 18
 
@@ -114,15 +117,23 @@ def _validate_phone(val):
 def _calc_student_fee(student, period, cult_fee, cult_fee2=0, tuition_override=None):
     """
     Per-student fee:
-      adult (>=18) → culture fees only (up to 2 classes)
-      minor (<18)  → tuition + culture fees (up to 2 classes)
+      adult (is_adult=1) → culture fees only (up to 2 classes)
+        - if mfcs_affiliation='Y' → apply period discount per culture class
+      minor (is_adult=0)  → tuition + culture fees (up to 2 classes)
     tuition_override: use this instead of period.tuition (for grandfathered rate)
     """
     if tuition_override is not None:
         tuition = float(tuition_override)
     else:
         tuition = float(period.get('tuition') or 0)
-    culture = float(cult_fee or 0) + float(cult_fee2 or 0)
+
+    # Apply MFCS affiliation discount to culture fees for adult members
+    mfcs = student.get('mfcs_affiliation') == 'Y'
+    mfcs_discount = float(period.get('discount') or 0) if mfcs else 0
+    cf1 = max(0, float(cult_fee  or 0) - mfcs_discount)
+    cf2 = max(0, float(cult_fee2 or 0) - mfcs_discount)
+    culture = cf1 + cf2
+
     if _is_adult(student):
         return culture
     else:
@@ -620,6 +631,8 @@ def new_student():
                                    student=None, action='new', family=current_user)
         media_consent = f.get('media_consent')
         media_consent = int(media_consent) if media_consent in ('0','1') else None
+        is_adult_val = 1 if f.get('is_adult') == '1' else 0
+        mfcs_aff = f.get('mfcs_affiliation') if is_adult_val else None
         conn = get_db_connection()
         cur  = conn.cursor()
         bday = f.get('birthday', '').strip() or '2999-01-01'
@@ -629,15 +642,15 @@ def new_student():
               (fid, last_name, first_name, chinese_name,
                gender, birthday, phone, email,
                ec_last_name, ec_first_name, ec_phone,
-               special_note, media_consent)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               special_note, media_consent, is_adult, mfcs_affiliation)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (current_user.id, last, first,
              f.get('chinese_name', '?'), f.get('gender', '?'),
              bday, f.get('phone', '?'), f.get('email', '?'),
              f.get('ec_last_name', '?'), f.get('ec_first_name', '?'),
              f.get('ec_phone', '?'), f.get('special_note', ''),
-             media_consent)
+             media_consent, is_adult_val, mfcs_aff)
         )
         conn.commit()
         conn.close()
@@ -678,6 +691,8 @@ def edit_student(student_id):
         bday = f.get('birthday', '').strip() or '2999-01-01'
         media_consent = f.get('media_consent')
         media_consent = int(media_consent) if media_consent in ('0','1') else None
+        is_adult_val = 1 if f.get('is_adult') == '1' else 0
+        mfcs_aff = f.get('mfcs_affiliation') if is_adult_val else None
         cur2 = conn.cursor()
         cur2.execute(
                 """
@@ -685,7 +700,8 @@ def edit_student(student_id):
                   last_name=%s, first_name=%s, chinese_name=%s,
                   gender=%s, birthday=%s, phone=%s, email=%s,
                   ec_last_name=%s, ec_first_name=%s, ec_phone=%s,
-                  special_note=%s, media_consent=%s
+                  special_note=%s, media_consent=%s,
+                  is_adult=%s, mfcs_affiliation=%s
                 WHERE id=%s AND fid=%s
                 """,
                 (last, first,
@@ -693,7 +709,8 @@ def edit_student(student_id):
                  bday, f.get('phone', '?'), f.get('email', '?'),
                  f.get('ec_last_name', '?'), f.get('ec_first_name', '?'),
                  f.get('ec_phone', '?'), f.get('special_note', ''),
-                 media_consent, student_id, current_user.id)
+                 media_consent, is_adult_val, mfcs_aff,
+                 student_id, current_user.id)
             )
         conn.commit()
         conn.close()
@@ -762,7 +779,7 @@ def register_classes(period_id):
 
     conn.close()
 
-    # Tag each student with adult flag for template logic
+    # Tag each student with adult flag — use is_adult column, fall back to birthday
     for s in students:
         s['_is_adult'] = _is_adult(s)
 
@@ -938,7 +955,8 @@ def submit_registration(period_id):
 
         for r in reg_rows:
             name     = f"{r['last_name']}, {r['first_name']}"
-            is_adult = _is_adult({'birthday': r['birthday']})
+            is_adult = _is_adult(r)
+            mfcs     = r.get('mfcs_affiliation') == 'Y'
             tuit     = 0.0 if is_adult else email_eff_tuition
             cf1      = float(r['cult_fee']  or 0)
             cf2      = float(r['cult_fee2'] or 0)
@@ -970,7 +988,7 @@ def submit_registration(period_id):
         reg_fee  = float(period.get('registration_fee') or 0)
         pa_dep   = float(period.get('pa_assignment_deposit') or 0)
         discount_per = float(period.get('discount') or 0)
-        minor_cnt = sum(1 for r in reg_rows if not _is_adult({'birthday': r['birthday']}))
+        minor_cnt = sum(1 for r in reg_rows if not _is_adult(r))
         extra_kids = max(0, minor_cnt - 2)
         disc_amt = extra_kids * discount_per
 

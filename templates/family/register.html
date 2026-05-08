@@ -244,7 +244,7 @@ const REG_FEE  = {{ period.registration_fee or 0 }};
 const PA_DEP   = {{ period.pa_assignment_deposit or 0 }};
 const DISCOUNT = {{ period.discount|float if period.discount else 0 }};
 const STUDENTS = [{% for s in students %}
-  {sid:{{s.id}},name:"{{s.last_name}}, {{s.first_name}}",isAdult:{{s._is_adult|lower}}},
+  {sid:{{s.id}},name:"{{s.last_name}}, {{s.first_name}}",isAdult:{{s._is_adult|lower}},mfcs:{{('true' if s.mfcs_affiliation == 'Y' else 'false')}},
 {% endfor %}];
 const CULT_FEES = { {% for c in cult_classes_all %}"{{c.id}}":{{c.fee or 0}},{% endfor %} };
 const CULT_NAMES = { {% for c in cult_classes_all %}"{{c.id}}":"{{c.name}}",{% endfor %} };
@@ -260,8 +260,11 @@ function calcFees(){
     const cult2Sel = document.querySelector('select[name="cult2_'+s.sid+'"]');
     const cid  = cultSel  ? cultSel.value  : '';
     const cid2 = cult2Sel ? cult2Sel.value : '';
-    const cf1 = CULT_FEES[cid]  || 0;
-    const cf2 = CULT_FEES[cid2] || 0;
+    const cf1_raw = CULT_FEES[cid]  || 0;
+    const cf2_raw = CULT_FEES[cid2] || 0;
+    const mfcsDiscount = s.mfcs ? DISCOUNT : 0;
+    const cf1 = Math.max(0, cf1_raw - mfcsDiscount);
+    const cf2 = Math.max(0, cf2_raw - mfcsDiscount);
     const tuit = s.isAdult ? 0 : TUITION;
     const stFee = tuit + cf1 + cf2;
     sub += stFee;

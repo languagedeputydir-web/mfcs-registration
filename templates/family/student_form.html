@@ -101,6 +101,35 @@ document.addEventListener('DOMContentLoaded', function() {
              title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
     </div>
 
+    {# ── Student Type ── #}
+    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Student Type</h6>
+    <div class="mb-3">
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="is_adult" id="is_adult_0"
+               value="0" onchange="toggleAdultFields()"
+               {% if not student or not student.is_adult %}checked{% endif %}>
+        <label class="form-check-label" for="is_adult_0">Non-adult Student</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="is_adult" id="is_adult_1"
+               value="1" onchange="toggleAdultFields()"
+               {% if student and student.is_adult %}checked{% endif %}>
+        <label class="form-check-label" for="is_adult_1">Adult Student</label>
+      </div>
+    </div>
+    <div id="affiliation_section" class="mb-4" style="display:{{ 'block' if student and student.is_adult else 'none' }}">
+      <label class="form-label small fw-500">MFCS Affiliation <span class="text-danger">*</span></label>
+      <select name="mfcs_affiliation" class="form-select" id="mfcs_affiliation">
+        <option value="">— Select —</option>
+        <option value="Y" {% if student and student.mfcs_affiliation == 'Y' %}selected{% endif %}>
+          MFCS Affiliation (Current Parents/Grandparents, Board Members, Alumni)
+        </option>
+        <option value="N" {% if student and student.mfcs_affiliation == 'N' %}selected{% endif %}>
+          Non-MFCS Affiliation (General Public / Others)
+        </option>
+      </select>
+    </div>
+
     {# ── Medical Conditions ── #}
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Medical Conditions</h6>
     <div class="mb-4">
@@ -173,4 +202,24 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </form>
 </div>
+<script>
+function toggleAdultFields() {
+  const isAdult = document.getElementById('is_adult_1').checked;
+  const section = document.getElementById('affiliation_section');
+  const select  = document.getElementById('mfcs_affiliation');
+  section.style.display = isAdult ? 'block' : 'none';
+  select.required = isAdult;
+  if (!isAdult) select.value = '';
+}
+// Validate affiliation on submit
+document.querySelector('form').addEventListener('submit', function(e) {
+  const isAdult = document.getElementById('is_adult_1').checked;
+  const aff = document.getElementById('mfcs_affiliation').value;
+  if (isAdult && !aff) {
+    e.preventDefault();
+    document.getElementById('mfcs_affiliation').classList.add('is-invalid');
+    document.getElementById('mfcs_affiliation').focus();
+  }
+});
+</script>
 {% endblock %}

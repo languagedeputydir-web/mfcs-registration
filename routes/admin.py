@@ -95,7 +95,8 @@ def _recalc_family_record(cur, fid, pid):
         return 0.0, False
 
     from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee
-    cur.execute("""SELECT s.birthday, sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+    cur.execute("""SELECT s.birthday, s.is_adult, s.mfcs_affiliation,
+        sr.lcgrid, sr.ccgrid, sr.ccgrid2,
         COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
         FROM student s
         JOIN student_record sr ON sr.sid=s.id
@@ -107,10 +108,10 @@ def _recalc_family_record(cur, fid, pid):
     student_subtotal = 0.0
     for r in rows:
         student_subtotal += _calc_student_fee(
-            {'birthday': r['birthday']}, period,
+            r, period,
             float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0)
         )
-    minor_count = sum(1 for r in rows if not _is_adult({'birthday': r['birthday']}))
+    minor_count = sum(1 for r in rows if not _is_adult(r))
     new_total = _calc_total_family_fee(student_subtotal, period, minor_count)
 
     cur.execute(
@@ -1265,9 +1266,12 @@ def family_detail(fid):
     # Calculate per-student fee for display
     from routes.family import _age, _is_adult, _calc_student_fee
     for sr in student_records:
-        student_dict = {'birthday': sr.get('birthday')}
+        student_dict = {'birthday': sr.get('birthday'),
+                        'is_adult': sr.get('is_adult', 0),
+                        'mfcs_affiliation': sr.get('mfcs_affiliation')}
         period_dict  = {'tuition': sr.get('period_tuition', 0),
-                        'registration_fee': 0, 'pa_assignment_deposit': 0}
+                        'registration_fee': 0, 'pa_assignment_deposit': 0,
+                        'discount': sr.get('period_discount', 0)}
         cult_fee  = float(sr.get('cult_fee',  0) or 0)
         cult_fee2 = float(sr.get('cult_fee2', 0) or 0)
         sr['display_fee'] = _calc_student_fee(student_dict, period_dict, cult_fee, cult_fee2)
