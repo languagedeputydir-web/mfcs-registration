@@ -149,13 +149,13 @@
   <div class="small">
     <strong>How fees are calculated:</strong><br>
     • Students <strong>under 18</strong>:
-      Tuition (${{ "%.2f"|format(period.tuition or 0) }}) + cultural program fee(s)<br>
+      Tuition (<strong>${{ "%.2f"|format(eff_tuition or period.tuition or 0) }}</strong>
+      {% if tuition_type == 'grandfathered' %}
+      <span class="badge bg-success ms-1">Returning family rate</span>
+      {% endif %}) + cultural program fee(s)<br>
     • Students <strong>18 or older</strong>: Cultural program fee(s) only<br>
     • Language program: included in tuition &nbsp;·&nbsp;
       Up to 2 cultural programs per student
-    {% if tuition_type == 'grandfathered' %}
-    <br>• <span class="text-success">✦ Grandfathered tuition rate applied: ${{ "%.2f"|format(eff_tuition) }}</span>
-    {% endif %}
   </div>
 </div>
 

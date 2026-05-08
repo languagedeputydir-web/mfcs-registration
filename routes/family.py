@@ -766,6 +766,11 @@ def register_classes(period_id):
     for s in students:
         s['_is_adult'] = _is_adult(s)
 
+    # Calculate effective tuition for this family (grandfathered or standard)
+    conn2 = get_db_connection()
+    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn2)
+    conn2.close()
+
     return render_template('family/register.html',
                            period=period,
                            students=students,
@@ -774,7 +779,9 @@ def register_classes(period_id):
                            cult_classes_minor=cult_classes_minor,
                            cult_classes_second_minor=cult_classes_second_minor,
                            cult_classes_second=cult_classes_second,
-                           existing=existing)
+                           existing=existing,
+                           eff_tuition=eff_tuition,
+                           tuition_type=tuition_type)
 
 
 @family_bp.route('/register/<int:period_id>/submit', methods=['POST'])
@@ -924,10 +931,15 @@ def submit_registration(period_id):
         # Build per-student receipt lines
         text_rows = ''
         html_rows = ''
+        # Get effective tuition for this family for the email receipt
+        email_conn2 = get_db_connection()
+        email_eff_tuition, email_tuition_type = _effective_tuition(period, current_user.id, email_conn2)
+        email_conn2.close()
+
         for r in reg_rows:
             name     = f"{r['last_name']}, {r['first_name']}"
             is_adult = _is_adult({'birthday': r['birthday']})
-            tuit     = 0.0 if is_adult else float(period.get('tuition') or 0)
+            tuit     = 0.0 if is_adult else email_eff_tuition
             cf1      = float(r['cult_fee']  or 0)
             cf2      = float(r['cult_fee2'] or 0)
             st_fee   = tuit + cf1 + cf2
@@ -1042,7 +1054,8 @@ def submit_registration(period_id):
                 f"<p>Dear {current_user.first_name_0} {current_user.last_name_0},</p>"
                 f"<p>Your class registration for <strong>{period['name']}</strong> has been received.</p>"
                 f"<h3 style='border-bottom:2px solid #c0392b;padding-bottom:6px'>Registration Receipt</h3>"
-                f"<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+                + (f"<p style='color:green'>✦ Returning family tuition rate applied: ${email_eff_tuition:.2f}</p>" if email_tuition_type == 'grandfathered' else "")
+                + f"<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse;width:100%'>"
                 f"<tr style='background:#f0f0f0'>"
                 f"<th>Student</th><th>Language</th><th>Culture 1</th>"
                 f"<th>Culture 2</th><th>Tuition</th><th>Subtotal</th></tr>"
