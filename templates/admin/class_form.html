@@ -104,10 +104,6 @@
     <div class="d-flex gap-2">
       <button type="submit" class="btn btn-admin px-4">{{ 'Save Changes' if cls else 'Add Class' }}</button>
       <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancel</a>
-      {% if cls %}
-      <a href="{{ url_for('admin.class_assignments', cgrid=cls.id) }}"
-         class="btn btn-outline-primary ms-auto">👥 Assignments</a>
-      {% endif %}
     </div>
   </form>
 </div>

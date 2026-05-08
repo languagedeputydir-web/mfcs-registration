@@ -978,6 +978,45 @@ def submit_registration(period_id):
                              f"({extra_kids} child{'ren' if extra_kids>1 else ''} × ${discount_per:.2f})</td>"
                              f"<td style='text-align:right;color:green'>-${disc_amt:.2f}</td></tr>")
 
+        # Build payment instructions from period settings
+        check_title = period.get('check_title','') or 'Monmouth Fidelity Chinese School'
+        attention   = period.get('attention','')   or ''
+        addr        = period.get('street_address','') or ''
+        city        = period.get('city','')  or ''
+        state_      = period.get('state','') or ''
+        zip_        = period.get('zip','')   or ''
+
+        pay_text = (
+            f"\nPAYMENT INSTRUCTIONS\n"
+            f"{'='*50}\n"
+            f"Option 1 — Pay in Person\n"
+            f"  Bring cash or cheque to the school office.\n\n"
+            f"Option 2 — Pay by Mail\n"
+            f"  Make cheque payable to: {check_title}\n"
+        )
+        if attention:
+            pay_text += f"  Attention: {attention}\n"
+        if addr:
+            pay_text += f"  Mail to: {addr}, {city}, {state_} {zip_}\n"
+        pay_text += "  Please include your family name on the cheque.\n"
+
+        pay_html = (
+            f"<h3 style='border-bottom:2px solid #c0392b;padding-bottom:6px'>Payment Instructions</h3>"
+            f"<table cellpadding='10' cellspacing='0' style='width:100%;border:1px solid #ddd'>"
+            f"<tr style='background:#f9f9f9;vertical-align:top'>"
+            f"<td style='width:50%;border-right:1px solid #ddd'>"
+            f"<strong>Option 1 — Pay in Person</strong><br><br>"
+            f"Bring cash or cheque to the school office."
+            f"</td>"
+            f"<td style='width:50%;padding-left:16px'>"
+            f"<strong>Option 2 — Pay by Mail</strong><br><br>"
+            f"Make cheque payable to:<br><strong>{check_title}</strong><br>"
+            + (f"Attention: {attention}<br>" if attention else "")
+            + (f"<br>{addr}<br>{city}, {state_} {zip_}" if addr else "")
+            + f"<br><br><em>Please include your family name on the cheque.</em>"
+            f"</td></tr></table>"
+        )
+
         _send_email(
             to_addr=current_user.primary_email,
             subject=f'MFCS — Registration Received (Pending Payment) — {period["name"]}',
@@ -991,6 +1030,7 @@ def submit_registration(period_id):
                 f"{text_summary}"
                 f"  {'─'*30}\n"
                 f"  TOTAL DUE:                 ${total_due:.2f}\n\n"
+                f"{pay_text}\n"
                 f"{'='*50}\n\n"
                 f"STATUS: PENDING\n"
                 f"Your registration will not be finalized until payment is received.\n"
@@ -1011,7 +1051,8 @@ def submit_registration(period_id):
                 f"<tr style='background:#e8f5e9;font-weight:bold'>"
                 f"<td colspan='5'><strong>TOTAL DUE</strong></td>"
                 f"<td style='text-align:right'><strong>${total_due:.2f}</strong></td></tr>"
-                f"</table>"
+                f"</table><br>"
+                f"{pay_html}"
                 f"<div style='background:#fff3cd;border:1px solid #ffc107;padding:12px;"
                 f"border-radius:6px;margin:16px 0'>"
                 f"<strong>⚠ Status: PENDING PAYMENT</strong><br>"
