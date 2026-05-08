@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Check Your Email — MFCS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height:75vh">
+  <div style="width:100%;max-width:500px;text-align:center">
+    <div style="font-size:3rem;margin-bottom:16px">📧</div>
+    <h3 class="mb-3">Check Your Email</h3>
+    <p class="text-muted mb-3">
+      We've sent a verification link to:<br>
+      <strong>{{ email }}</strong>
+    </p>
+    <p class="text-muted mb-4">
+      Please click the link in that email to activate your account.
+    </p>
+    <div class="alert alert-warning small text-start">
+      <strong>⚠ Don't see the email?</strong><br>
+      Please check your <strong>spam or junk folder</strong>. The email was sent from
+      <strong>registration@mfcsnj.org</strong>.<br><br>
+      If you still don't see it after a few minutes, you can
+      <a href="{{ url_for('family.resend_verification') }}">request a new verification link</a>.
+    </div>
+    <a href="{{ url_for('family.login') }}" class="btn btn-outline-secondary mt-2">
+      Back to Login
+    </a>
+  </div>
+</div>
+{% endblock %}

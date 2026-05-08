@@ -212,6 +212,11 @@ def login():
             pw_plain = row.get('password', '')
             stored = pw_hash if pw_hash and pw_hash != '?' else pw_plain
             if _check(password, stored):
+                # Block login if email not verified
+                if row.get('email_verified') == 0:
+                    flash('Please verify your email address before logging in. '
+                          'Check your inbox (and spam folder) for the verification link.', 'warning')
+                    return render_template('family/login.html', show_resend=True, email=email)
                 login_user(Family(row), remember=remember)
                 # Redirect to profile if address not yet verified
                 if not Family(row).address_verified:
@@ -334,7 +339,6 @@ def register_account():
         if not pw:      field_errors['password']       = 'Password is required.'
         elif len(pw) < 8: field_errors['password']     = 'Password must be at least 8 characters.'
         elif pw != pw2: field_errors['confirm_password']= 'Passwords do not match.'
-        # Address validation
         street = f.get('street_address', '').strip()
         city   = f.get('city', '').strip()
         state  = f.get('state', '').strip()
@@ -351,27 +355,119 @@ def register_account():
             return render_template('family/register_account.html',
                                    field_errors={'primary_email': 'An account with that email already exists.'},
                                    form=f)
+
+        # Generate email verification token
+        verify_token = secrets.token_urlsafe(32)
+
         cur2 = conn.cursor()
         cur2.execute("""INSERT INTO family
             (primary_email,password,password_hash,
              last_name_0,first_name_0,last_name_1,first_name_1,
-             primary_phone,street_address,city,state,zip,address_verified)
-            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1)""",
+             primary_phone,street_address,city,state,zip,
+             address_verified,email_verified,email_verify_token)
+            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,%s)""",
             (email,_hash(pw),last,first,
              f.get('last_name_1', '?'),f.get('first_name_1', '?'),
-             phone, street, city, state, zip_))
+             phone, street, city, state, zip_, verify_token))
         conn.commit()
-        # Log them in right away
-        cur.execute("SELECT * FROM family WHERE LOWER(primary_email)=%s",(email,))
-        row = cur.fetchone(); conn.close()
-        if not row:
-            flash('Account created. Please log in.', 'success')
-            return redirect(url_for('family.login'))
-        login_user(Family(row))
-        flash('Welcome! Your account has been created.', 'success')
-        return redirect(url_for('family.dashboard'))
+
+        # Send verification email
+        verify_url = url_for('family.verify_email', token=verify_token, _external=True)
+        _send_email(
+            to_addr=email,
+            subject='MFCS — Please verify your email address',
+            text_body=(
+                f"Dear {first} {last},\n\n"
+                f"Thank you for creating an account with Monmouth Fidelity Chinese School.\n\n"
+                f"Please click the link below to verify your email address:\n"
+                f"{verify_url}\n\n"
+                f"This link will expire in 24 hours.\n\n"
+                f"If you did not create this account, please ignore this email.\n\n"
+                f"NOTE: If you do not see this email, please check your spam or junk folder.\n\n"
+                f"Monmouth Fidelity Chinese School"
+            ),
+            html_body=(
+                f"<p>Dear {first} {last},</p>"
+                f"<p>Thank you for creating an account with Monmouth Fidelity Chinese School.</p>"
+                f"<p>Please click the button below to verify your email address:</p>"
+                f"<p style='text-align:center;margin:24px 0'>"
+                f"<a href='{verify_url}' style='background:#c0392b;color:#fff;padding:12px 28px;"
+                f"border-radius:6px;text-decoration:none;font-weight:bold'>Verify My Email</a></p>"
+                f"<p>Or copy and paste this link: <a href='{verify_url}'>{verify_url}</a></p>"
+                f"<p>This link will expire in 24 hours.</p>"
+                f"<p style='color:#e74c3c'><strong>NOTE:</strong> If you do not see this email "
+                f"in your inbox, please check your <strong>spam or junk folder</strong>.</p>"
+                f"<p>Monmouth Fidelity Chinese School</p>"
+            )
+        )
+        conn.close()
+        return render_template('family/verify_email_sent.html', email=email)
     return render_template('family/register_account.html')
-# ── dashboard ──────────────────────────────────────────────────────────────────
+@family_bp.route('/verify-email/<token>')
+def verify_email(token):
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM family WHERE email_verify_token=%s", (token,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        flash('This verification link is invalid or has already been used.', 'error')
+        return redirect(url_for('family.login'))
+    cur2 = conn.cursor()
+    cur2.execute(
+        "UPDATE family SET email_verified=1, email_verify_token=NULL WHERE id=%s",
+        (row['id'],)
+    )
+    conn.commit(); conn.close()
+    login_user(Family(row))
+    flash('Your email has been verified! Welcome to MFCS.', 'success')
+    return redirect(url_for('family.dashboard'))
+
+
+@family_bp.route('/resend-verification', methods=['GET', 'POST'])
+def resend_verification():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        conn  = get_db_connection(); cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT * FROM family WHERE LOWER(primary_email)=%s AND email_verified=0",
+            (email,)
+        )
+        row = cur.fetchone()
+        if row:
+            verify_token = secrets.token_urlsafe(32)
+            cur2 = conn.cursor()
+            cur2.execute(
+                "UPDATE family SET email_verify_token=%s WHERE id=%s",
+                (verify_token, row['id'])
+            )
+            conn.commit()
+            verify_url = url_for('family.verify_email', token=verify_token, _external=True)
+            _send_email(
+                to_addr=email,
+                subject='MFCS — Email Verification (Resent)',
+                text_body=(
+                    f"Dear {row['first_name_0']} {row['last_name_0']},\n\n"
+                    f"Here is your new email verification link:\n{verify_url}\n\n"
+                    f"NOTE: If you do not see this email, please check your spam or junk folder.\n\n"
+                    f"Monmouth Fidelity Chinese School"
+                ),
+                html_body=(
+                    f"<p>Dear {row['first_name_0']} {row['last_name_0']},</p>"
+                    f"<p>Here is your new email verification link:</p>"
+                    f"<p style='text-align:center;margin:24px 0'>"
+                    f"<a href='{verify_url}' style='background:#c0392b;color:#fff;padding:12px 28px;"
+                    f"border-radius:6px;text-decoration:none;font-weight:bold'>Verify My Email</a></p>"
+                    f"<p style='color:#e74c3c'><strong>NOTE:</strong> If you do not see this email "
+                    f"in your inbox, please check your <strong>spam or junk folder</strong>.</p>"
+                    f"<p>Monmouth Fidelity Chinese School</p>"
+                )
+            )
+        conn.close()
+        flash('If that email has a pending verification, a new link has been sent.', 'info')
+        return redirect(url_for('family.login'))
+    return render_template('family/resend_verification.html')
+
+
 
 @family_bp.route('/dashboard')
 @login_required

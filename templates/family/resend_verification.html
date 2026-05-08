@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Resend Verification Email — MFCS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height:75vh">
+  <div style="width:100%;max-width:420px">
+    <h4 class="mb-1">Resend Verification Email</h4>
+    <p class="text-muted small mb-4">
+      Enter your email address and we'll send you a new verification link.
+    </p>
+    <div class="card p-4">
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label small fw-500">Email Address</label>
+          <input type="email" name="email" class="form-control"
+                 placeholder="your@email.com" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Send New Link</button>
+      </form>
+    </div>
+    <div class="alert alert-warning small mt-3">
+      <strong>⚠ Check your spam folder</strong> if you don't see the email.
+      The email is sent from <strong>registration@mfcsnj.org</strong>.
+    </div>
+    <div class="text-center mt-2 small">
+      <a href="{{ url_for('family.login') }}" class="text-decoration-none text-muted">
+        ← Back to login
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
