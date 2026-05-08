@@ -1122,9 +1122,10 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
-            COUNT(s.id) AS student_count
+            COUNT(DISTINCT sr.sid) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
+            LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
             WHERE fr.pid=%s {sc} GROUP BY fr.id
             ORDER BY f.last_name_0,f.first_name_0""",(pid,))
         regs = cur.fetchall()
@@ -1181,22 +1182,24 @@ def families():
         filter_pid = int(pid)
         if q:
             like = f"%{q}%"
-            cur.execute("""SELECT f.*,COUNT(DISTINCT s.id) AS student_count,
+            cur.execute("""SELECT f.*,COUNT(DISTINCT sr.sid) AS student_count,
                 fr.reg_status, fr.total_due, fr.total_paid, fr.adjustment
                 FROM family_record fr
                 JOIN family f ON f.id=fr.fid
                 LEFT JOIN student s ON s.fid=f.id
+                LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
                 WHERE fr.pid=%s
                 AND (f.last_name_0 LIKE %s OR f.first_name_0 LIKE %s
                      OR f.primary_email LIKE %s)
                 GROUP BY f.id, fr.id ORDER BY f.last_name_0,f.first_name_0""",
                 (filter_pid,like,like,like))
         else:
-            cur.execute("""SELECT f.*,COUNT(DISTINCT s.id) AS student_count,
+            cur.execute("""SELECT f.*,COUNT(DISTINCT sr.sid) AS student_count,
                 fr.reg_status, fr.total_due, fr.total_paid, fr.adjustment
                 FROM family_record fr
                 JOIN family f ON f.id=fr.fid
                 LEFT JOIN student s ON s.fid=f.id
+                LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
                 WHERE fr.pid=%s
                 GROUP BY f.id, fr.id ORDER BY f.last_name_0,f.first_name_0""",
                 (filter_pid,))
