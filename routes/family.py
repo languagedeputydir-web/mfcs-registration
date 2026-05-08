@@ -904,8 +904,9 @@ def submit_registration(period_id):
 
     # Send registration confirmation email
     try:
-        cur2 = get_db_connection().cursor(dictionary=True)
-        cur2.execute("""
+        email_conn = get_db_connection()
+        email_cur  = email_conn.cursor(dictionary=True)
+        email_cur.execute("""
             SELECT sr.*, s.first_name, s.last_name,
                    lc.name AS lang_class, cc.name AS cult_class, cc2.name AS cult_class2
             FROM student_record sr
@@ -915,7 +916,8 @@ def submit_registration(period_id):
             LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
             WHERE sr.pid = %s AND s.fid = %s
         """, (period_id, current_user.id))
-        reg_rows = cur2.fetchall()
+        reg_rows = email_cur.fetchall()
+        email_conn.close()
 
         student_lines_text = ''
         student_lines_html = ''
@@ -930,31 +932,42 @@ def submit_registration(period_id):
 
         _send_email(
             to_addr=current_user.primary_email,
-            subject=f'MFCS — Registration Confirmation ({period["name"]})',
+            subject=f'MFCS — Registration Received (Pending Payment) — {period["name"]}',
             text_body=(
                 f"Dear {current_user.first_name_0} {current_user.last_name_0},\n\n"
-                f"Thank you! Your registration for {period['name']} has been saved.\n\n"
+                f"Thank you! Your class registration for {period['name']} has been received.\n\n"
                 f"Students registered:\n{student_lines_text}\n"
                 f"Total Due: ${total_due:.2f}\n\n"
-                f"Please log in to your account to view your fee summary and payment details.\n\n"
+                f"IMPORTANT: Your registration is currently PENDING. It will not be "
+                f"finalized until payment is received by our finance team.\n\n"
+                f"Payment instructions will be provided by the school. Once your payment "
+                f"has been confirmed, you will receive a separate email notification.\n\n"
+                f"If you have any questions, please contact us at registration@mfcsnj.org.\n\n"
                 f"Monmouth Fidelity Chinese School"
             ),
             html_body=(
                 f"<p>Dear {current_user.first_name_0} {current_user.last_name_0},</p>"
-                f"<p>Thank you! Your registration for <strong>{period['name']}</strong> has been saved.</p>"
+                f"<p>Thank you! Your class registration for <strong>{period['name']}</strong> "
+                f"has been received.</p>"
                 f"<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>"
                 f"<tr style='background:#f0f0f0'><th>Student</th><th>Language</th>"
                 f"<th>Culture 1</th><th>Culture 2</th></tr>"
                 f"{student_lines_html}"
                 f"</table>"
                 f"<p><strong>Total Due: ${total_due:.2f}</strong></p>"
-                f"<p>Please log in to your account to view your fee summary and payment details.</p>"
+                f"<div style='background:#fff3cd;border:1px solid #ffc107;padding:12px;"
+                f"border-radius:6px;margin:16px 0'>"
+                f"<strong>⚠ Registration Status: PENDING</strong><br>"
+                f"Your registration will not be finalized until payment is received by "
+                f"our finance team. Once your payment has been confirmed, you will receive "
+                f"a separate confirmation email.</div>"
+                f"<p>If you have any questions, please contact us at "
+                f"<a href='mailto:registration@mfcsnj.org'>registration@mfcsnj.org</a>.</p>"
                 f"<p>Monmouth Fidelity Chinese School</p>"
             )
         )
-        cur2.close()
     except Exception as e:
-        print(f'Confirmation email error: {e}')
+        print(f'Confirmation email error: {e}', flush=True)
 
     return redirect(url_for('family.fee_summary', period_id=period_id))
 
