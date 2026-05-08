@@ -907,8 +907,10 @@ def submit_registration(period_id):
         email_conn = get_db_connection()
         email_cur  = email_conn.cursor(dictionary=True)
         email_cur.execute("""
-            SELECT sr.*, s.first_name, s.last_name,
-                   lc.name AS lang_class, cc.name AS cult_class, cc2.name AS cult_class2
+            SELECT sr.*, s.first_name, s.last_name, s.birthday,
+                   lc.name AS lang_class,
+                   cc.name  AS cult_class,  cc.fee  AS cult_fee,
+                   cc2.name AS cult_class2, cc2.fee AS cult_fee2
             FROM student_record sr
             JOIN student s ON s.id = sr.sid
             LEFT JOIN class_group_record lc  ON lc.id  = sr.lcgrid
@@ -919,50 +921,104 @@ def submit_registration(period_id):
         reg_rows = email_cur.fetchall()
         email_conn.close()
 
-        student_lines_text = ''
-        student_lines_html = ''
+        # Build per-student receipt lines
+        text_rows = ''
+        html_rows = ''
         for r in reg_rows:
-            name = f"{r['last_name']}, {r['first_name']}"
-            lang = r['lang_class'] or '—'
-            cult = r['cult_class'] or '—'
-            cult2 = r['cult_class2'] or '—'
-            student_lines_text += f"  • {name}: Language: {lang} | Culture 1: {cult} | Culture 2: {cult2}\n"
-            student_lines_html += (f"<tr><td>{name}</td><td>{lang}</td>"
-                                   f"<td>{cult}</td><td>{cult2}</td></tr>")
+            name     = f"{r['last_name']}, {r['first_name']}"
+            is_adult = _is_adult({'birthday': r['birthday']})
+            tuit     = 0.0 if is_adult else float(period.get('tuition') or 0)
+            cf1      = float(r['cult_fee']  or 0)
+            cf2      = float(r['cult_fee2'] or 0)
+            st_fee   = tuit + cf1 + cf2
+            lang     = r['lang_class']  or '—'
+            cult     = r['cult_class']  or '—'
+            cult2    = r['cult_class2'] or '—'
+
+            text_rows += (
+                f"  {name}\n"
+                f"    Language:  {lang}\n"
+                f"    Culture 1: {cult}{f' (${cf1:.2f})' if cf1 else ''}\n"
+                f"    Culture 2: {cult2}{f' (${cf2:.2f})' if cf2 else ''}\n"
+                f"    Tuition:   {'N/A (adult)' if is_adult else f'${tuit:.2f}'}\n"
+                f"    Subtotal:  ${st_fee:.2f}\n\n"
+            )
+            html_rows += (
+                f"<tr>"
+                f"<td><strong>{name}</strong></td>"
+                f"<td>{lang}</td>"
+                f"<td>{cult}{'<br><small>$'+f'{cf1:.2f}'+'</small>' if cf1 else ''}</td>"
+                f"<td>{cult2}{'<br><small>$'+f'{cf2:.2f}'+'</small>' if cf2 else ''}</td>"
+                f"<td style='text-align:right'>{'N/A' if is_adult else '$'+f'{tuit:.2f}'}</td>"
+                f"<td style='text-align:right'>${st_fee:.2f}</td>"
+                f"</tr>"
+            )
+
+        # Fee summary lines
+        reg_fee  = float(period.get('registration_fee') or 0)
+        pa_dep   = float(period.get('pa_assignment_deposit') or 0)
+        discount_per = float(period.get('discount') or 0)
+        minor_cnt = sum(1 for r in reg_rows if not _is_adult({'birthday': r['birthday']}))
+        extra_kids = max(0, minor_cnt - 2)
+        disc_amt = extra_kids * discount_per
+
+        text_summary = (
+            f"  Registration fee:          ${reg_fee:.2f}\n"
+            f"  PA Assignment Duty deposit: ${pa_dep:.2f} (refundable)\n"
+        )
+        html_summary = (
+            f"<tr><td colspan='5'>Registration fee</td>"
+            f"<td style='text-align:right'>${reg_fee:.2f}</td></tr>"
+            f"<tr><td colspan='5'>PA Assignment Duty deposit (refundable)</td>"
+            f"<td style='text-align:right'>${pa_dep:.2f}</td></tr>"
+        )
+        if disc_amt > 0:
+            text_summary += f"  Multi-child discount ({extra_kids} child{'ren' if extra_kids>1 else ''}): -${disc_amt:.2f}\n"
+            html_summary += (f"<tr><td colspan='5' style='color:green'>Multi-child discount "
+                             f"({extra_kids} child{'ren' if extra_kids>1 else ''} × ${discount_per:.2f})</td>"
+                             f"<td style='text-align:right;color:green'>-${disc_amt:.2f}</td></tr>")
 
         _send_email(
             to_addr=current_user.primary_email,
             subject=f'MFCS — Registration Received (Pending Payment) — {period["name"]}',
             text_body=(
                 f"Dear {current_user.first_name_0} {current_user.last_name_0},\n\n"
-                f"Thank you! Your class registration for {period['name']} has been received.\n\n"
-                f"Students registered:\n{student_lines_text}\n"
-                f"Total Due: ${total_due:.2f}\n\n"
-                f"IMPORTANT: Your registration is currently PENDING. It will not be "
-                f"finalized until payment is received by our finance team.\n\n"
-                f"Payment instructions will be provided by the school. Once your payment "
-                f"has been confirmed, you will receive a separate email notification.\n\n"
-                f"If you have any questions, please contact us at registration@mfcsnj.org.\n\n"
+                f"Your class registration for {period['name']} has been received.\n\n"
+                f"{'='*50}\n"
+                f"REGISTRATION RECEIPT\n"
+                f"{'='*50}\n\n"
+                f"{text_rows}"
+                f"{text_summary}"
+                f"  {'─'*30}\n"
+                f"  TOTAL DUE:                 ${total_due:.2f}\n\n"
+                f"{'='*50}\n\n"
+                f"STATUS: PENDING\n"
+                f"Your registration will not be finalized until payment is received.\n"
+                f"Once confirmed, you will receive a separate payment confirmation email.\n\n"
+                f"Questions? Contact us at registration@mfcsnj.org\n\n"
                 f"Monmouth Fidelity Chinese School"
             ),
             html_body=(
                 f"<p>Dear {current_user.first_name_0} {current_user.last_name_0},</p>"
-                f"<p>Thank you! Your class registration for <strong>{period['name']}</strong> "
-                f"has been received.</p>"
-                f"<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>"
-                f"<tr style='background:#f0f0f0'><th>Student</th><th>Language</th>"
-                f"<th>Culture 1</th><th>Culture 2</th></tr>"
-                f"{student_lines_html}"
+                f"<p>Your class registration for <strong>{period['name']}</strong> has been received.</p>"
+                f"<h3 style='border-bottom:2px solid #c0392b;padding-bottom:6px'>Registration Receipt</h3>"
+                f"<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+                f"<tr style='background:#f0f0f0'>"
+                f"<th>Student</th><th>Language</th><th>Culture 1</th>"
+                f"<th>Culture 2</th><th>Tuition</th><th>Subtotal</th></tr>"
+                f"{html_rows}"
+                f"<tr style='background:#f9f9f9'>{html_summary}</tr>"
+                f"<tr style='background:#e8f5e9;font-weight:bold'>"
+                f"<td colspan='5'><strong>TOTAL DUE</strong></td>"
+                f"<td style='text-align:right'><strong>${total_due:.2f}</strong></td></tr>"
                 f"</table>"
-                f"<p><strong>Total Due: ${total_due:.2f}</strong></p>"
                 f"<div style='background:#fff3cd;border:1px solid #ffc107;padding:12px;"
                 f"border-radius:6px;margin:16px 0'>"
-                f"<strong>⚠ Registration Status: PENDING</strong><br>"
-                f"Your registration will not be finalized until payment is received by "
-                f"our finance team. Once your payment has been confirmed, you will receive "
-                f"a separate confirmation email.</div>"
-                f"<p>If you have any questions, please contact us at "
-                f"<a href='mailto:registration@mfcsnj.org'>registration@mfcsnj.org</a>.</p>"
+                f"<strong>⚠ Status: PENDING PAYMENT</strong><br>"
+                f"Your registration will not be finalized until payment is received by our finance team. "
+                f"Once your payment has been confirmed, you will receive a separate confirmation email.</div>"
+                f"<p>Questions? Contact us at "
+                f"<a href='mailto:registration@mfcsnj.org'>registration@mfcsnj.org</a></p>"
                 f"<p>Monmouth Fidelity Chinese School</p>"
             )
         )
