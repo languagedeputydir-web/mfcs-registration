@@ -1148,14 +1148,12 @@ def fee_summary(period_id):
     )
     fpr = cur.fetchone()
 
-    cur.execute(
+    cur.execute(\
         """
-        SELECT s.first_name, s.last_name, s.birthday,
+        SELECT s.first_name, s.last_name, s.birthday, s.is_adult, s.mfcs_affiliation,
                lc.name  AS lang_class_name,
-               cc.name  AS cult_class_name,
-               cc.fee   AS cult_fee,
-               cc2.name AS cult_class2_name,
-               cc2.fee  AS cult_fee2
+               cc.name  AS cult_class_name,  cc.fee  AS cult_fee,  cc.discount  AS cult_disc,
+               cc2.name AS cult_class2_name, cc2.fee AS cult_fee2, cc2.discount AS cult_disc2
         FROM   student_record sr
         JOIN   student s   ON s.id = sr.sid
         LEFT   JOIN class_group_record lc  ON lc.id  = sr.lcgrid
@@ -1168,7 +1166,6 @@ def fee_summary(period_id):
         (current_user.id, period_id)
     )
     raw_rows = cur.fetchall()
-    # conn stays open until after _effective_tuition call
     reg_fee  = float(period.get('registration_fee') or 0) if period else 0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
 
@@ -1178,36 +1175,47 @@ def fee_summary(period_id):
 
     rows = []
     student_subtotal = 0.0
+    minor_count = 0
     for r in raw_rows:
-        age       = _age(r.get('birthday'))
-        adult     = age is not None and age >= 18
-        cult_fee  = float(r.get('cult_fee')  or 0)
-        cult_fee2 = float(r.get('cult_fee2') or 0)
-        total_cult = cult_fee + cult_fee2
+        adult = _is_adult(r)
+        mfcs  = r.get('mfcs_affiliation') == 'Y'
+
+        cf1_raw = float(r.get('cult_fee')  or 0)
+        cf2_raw = float(r.get('cult_fee2') or 0)
+        disc1   = float(r.get('cult_disc')  or 0) if mfcs else 0
+        disc2   = float(r.get('cult_disc2') or 0) if mfcs else 0
+        cf1 = max(0, cf1_raw - disc1)
+        cf2 = max(0, cf2_raw - disc2)
+        total_cult = cf1 + cf2
 
         if adult:
             student_fee = total_cult
-            fee_note    = 'Adult — culture fee'
-            if cult_fee:  fee_note += f' ${cult_fee:.2f}'
-            if cult_fee2: fee_note += f' + ${cult_fee2:.2f}'
+            parts = []
+            if cf1: parts.append(f'Culture ${cf1:.2f}' + (' (discounted)' if disc1 else ''))
+            if cf2: parts.append(f'Culture 2 ${cf2:.2f}' + (' (discounted)' if disc2 else ''))
+            fee_note = ' + '.join(parts) if parts else 'Adult — no fee'
         else:
             student_fee = eff_tuition + total_cult
             tuition_label = f'Tuition ${eff_tuition:.2f}'
             if tuition_type == 'grandfathered':
                 tuition_label += ' ✦'
             parts = [tuition_label]
-            if cult_fee:  parts.append(f'Culture ${cult_fee:.2f}')
-            if cult_fee2: parts.append(f'Culture 2 ${cult_fee2:.2f}')
+            if cf1: parts.append(f'Culture ${cf1:.2f}')
+            if cf2: parts.append(f'Culture 2 ${cf2:.2f}')
             fee_note = ' + '.join(parts)
+            minor_count += 1
 
         student_subtotal += student_fee
         rows.append({**r,
                      'student_fee': student_fee,
                      'fee_note':    fee_note,
-                     'age':         age,
                      'is_adult':    adult})
 
-    grand_total = student_subtotal + reg_fee + pa_fee
+    # Multi-kid discount
+    discount_per = float(period.get('discount') or 0) if period else 0
+    extra_kids   = max(0, minor_count - 2)
+    multi_disc   = extra_kids * discount_per
+    grand_total  = student_subtotal + reg_fee + pa_fee - multi_disc
 
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,
@@ -1215,6 +1223,9 @@ def fee_summary(period_id):
                            student_subtotal=student_subtotal,
                            reg_fee=reg_fee,
                            pa_fee=pa_fee,
+                           multi_disc=multi_disc,
+                           extra_kids=extra_kids,
+                           discount_per=discount_per,
                            grand_total=grand_total,
                            tuition_type=tuition_type,
                            eff_tuition=eff_tuition)
