@@ -870,6 +870,11 @@ def submit_registration(period_id):
         cult_fee_amount2 = cult_fee_map.get(cid2, 0) if cid2 else 0
         cult_disc1 = cult_discount_map.get(cid, 0)  if cid  else 0
         cult_disc2 = cult_discount_map.get(cid2, 0) if cid2 else 0
+
+        # Skip student entirely if nothing selected
+        if not lid and not cid and not cid2:
+            continue
+
         student_fee = _calc_student_fee(student, period, cult_fee_amount,
                                         cult_fee_amount2, eff_tuition,
                                         cult_disc1, cult_disc2)
