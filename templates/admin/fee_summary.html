@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Fee Summary — Monmouth Fidelity Chinese School{% endblock %}
+
+{% block navbar %}
+{% include 'family/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Fee Summary</h2>
+<p class="text-muted mb-4">{{ period.name if period else '' }}</p>
+
+<!-- Per-student fees -->
+<div class="card mb-3">
+  <div class="card-header py-2 fw-600">Student Fees</div>
+  <table class="table mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Student</th>
+        <th>Language Program</th>
+        <th>Cultural Program 1</th>
+        <th>Cultural Program 2</th>
+        <th>Breakdown</th>
+        <th class="text-end">Fee</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>
+          <span class="fw-500">{{ r.last_name }}, {{ r.first_name }}</span>
+          {% if r.age is not none %}
+          <span class="badge bg-secondary ms-1 fw-normal" style="font-size:.7rem">
+            Age {{ r.age }}{% if r.is_adult %} · Adult{% endif %}
+          </span>
+          {% endif %}
+        </td>
+        <td class="small">
+          {% if r.is_adult %}<span class="text-muted">N/A</span>
+          {% else %}{{ r.lang_class_name or '—' }}{% endif %}
+        </td>
+        <td class="small">{{ r.cult_class_name or '—' }}</td>
+        <td class="small">{{ r.cult_class2_name or '—' }}</td>
+        <td class="small text-muted">{{ r.fee_note }}</td>
+        <td class="text-end fw-500">${{ "%.2f"|format(r.student_fee) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-muted text-center py-3">
+          No registrations on file.
+          {% if period %}
+          <a href="{{ url_for('family.register_classes', period_id=period.id) }}">
+            Register now →
+          </a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr class="table-light">
+        <td colspan="5" class="text-end text-muted small">Student subtotal</td>
+        <td class="text-end">${{ "%.2f"|format(student_subtotal) }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<!-- Family-level fees -->
+{% if rows %}
+<div class="card mb-4" style="max-width:440px">
+  <div class="card-header py-2 fw-600">Family Fees</div>
+  <table class="table table-sm mb-0">
+    <tr>
+      <td>Student fees subtotal</td>
+      <td class="text-end">${{ "%.2f"|format(student_subtotal) }}</td>
+    </tr>
+    <tr>
+      <td>Registration fee <span class="text-muted small">(non-refundable)</span></td>
+      <td class="text-end">${{ "%.2f"|format(reg_fee) }}</td>
+    </tr>
+    <tr>
+      <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
+      <td class="text-end">${{ "%.2f"|format(pa_fee) }}</td>
+    </tr>
+    {% if late_fee and late_fee > 0 %}
+    <tr class="text-danger">
+      <td>Late registration fee</td>
+      <td class="text-end">${{ "%.2f"|format(late_fee) }}</td>
+    </tr>
+    {% endif %}
+    {% if multi_disc and multi_disc > 0 %}
+    <tr class="text-success">
+      <td>Multi-child discount
+        <span class="text-muted small">({{ extra_kids }} child{{ 'ren' if extra_kids > 1 }} × ${{ "%.2f"|format(discount_per) }})</span>
+      </td>
+      <td class="text-end">-${{ "%.2f"|format(multi_disc) }}</td>
+    </tr>
+    {% endif %}
+    <tr class="table-dark">
+      <td class="fw-600">Total Due</td>
+      <td class="text-end fw-600">${{ "%.2f"|format(grand_total) }}</td>
+    </tr>
+  </table>
+</div>
+{% endif %}
+
+<!-- Payment status -->
+{% if fpr %}
+<div class="card p-4 mb-4" style="max-width:440px">
+  <h6 class="mb-3">Payment Status</h6>
+  <table class="table table-sm mb-0">
+    <tr>
+      <td>Total due</td>
+      <td class="text-end">${{ "%.2f"|format(fpr.total_due or 0) }}</td>
+    </tr>
+    <tr>
+      <td>Total paid</td>
+      <td class="text-end">${{ "%.2f"|format(fpr.total_paid or 0) }}</td>
+    </tr>
+    {% if fpr.adjustment %}
+    <tr>
+      <td>Adjustment</td>
+      <td class="text-end">${{ "%.2f"|format(fpr.adjustment) }}</td>
+    </tr>
+    {% endif %}
+    {% set balance = (fpr.total_due or 0)|float
+                   - (fpr.total_paid or 0)|float
+                   - (fpr.adjustment or 0)|float %}
+    <tr class="{{ 'table-danger' if balance > 0.01 else 'table-success' }}">
+      <td class="fw-600">Balance owing</td>
+      <td class="text-end fw-600">${{ "%.2f"|format(balance) }}</td>
+    </tr>
+  </table>
+  {% if fpr.description and fpr.description != '?' %}
+  <div class="mt-3 small text-muted">
+    <strong>Note from school:</strong> {{ fpr.description }}
+  </div>
+  {% endif %}
+  <div class="mt-3">
+    <span class="badge
+      {% if fpr.reg_status == 'Complete Registration' %}bg-success
+      {% elif fpr.reg_status == 'Pending' %}bg-warning text-dark
+      {% else %}bg-secondary{% endif %}">
+      {{ fpr.reg_status }}
+    </span>
+    {% if fpr.reg_status == 'Pending' %}
+    <div class="small text-muted mt-1">
+      Your registration is awaiting payment confirmation from the school.
+    </div>
+    {% elif fpr.reg_status == 'Complete Registration' %}
+    <div class="small text-success mt-1">
+      ✓ Your registration is complete.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Fee calculation note -->
+<div class="card p-3 mb-3 bg-light border-0" style="max-width:520px">
+  <div class="small">
+    <strong>How fees are calculated:</strong><br>
+    • Students <strong>under 18</strong>:
+      Tuition (<strong>${{ "%.2f"|format(eff_tuition or period.tuition or 0) }}</strong>
+      {% if tuition_type == 'grandfathered' %}
+      <span class="badge bg-success ms-1">Returning family rate</span>
+      {% endif %}) + cultural program fee(s)<br>
+    • Students <strong>18 or older</strong>: Cultural program fee(s) only<br>
+    • Language program: included in tuition &nbsp;·&nbsp;
+      Up to 2 cultural programs per student
+  </div>
+</div>
+
+<!-- Payment instructions -->
+{% if period and (period.check_title and period.check_title != '?') or (period and period.street_address and period.street_address != '?') %}
+<div class="card p-3 mb-3" style="max-width:520px;border-left:4px solid #2980b9">
+  <h6 class="mb-2">💳 Payment Instructions</h6>
+  <div class="small">
+    Please mail a check payable to
+    <strong>{{ period.check_title if period.check_title and period.check_title != '?' else 'MFCS' }}</strong>
+    {% if period.attention and period.attention != '?' %}
+    , Attention: <strong>{{ period.attention }}</strong>
+    {% endif %}
+    {% if period.street_address and period.street_address != '?' %}
+    <br>{{ period.street_address }}, {{ period.city }}, {{ period.state }} {{ period.zip }}
+    {% endif %}
+    {% if period.deadline and period.deadline|string != '2999-01-01' %}
+    <br><strong>Payment due by: {{ period.deadline }}</strong>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Refund policy -->
+<div class="card p-3 mb-4" style="max-width:520px;border-left:4px solid #ffc107">
+  <div class="small">
+    <strong>Refund Policy:</strong> For new students only, withdrawal within the first
+    4 classes of the school year — 80% refund of tuition only.
+    All other paid fees are non-refundable.
+  </div>
+</div>
+
+<div class="d-flex gap-2 flex-wrap">
+  {% if period %}
+  <a href="{{ url_for('family.register_classes', period_id=period.id) }}"
+     class="btn btn-outline-secondary btn-sm">Edit registration</a>
+  {% endif %}
+  <a href="{{ url_for('family.dashboard') }}"
+     class="btn btn-outline-secondary btn-sm">← Dashboard</a>
+</div>
+{% endblock %}

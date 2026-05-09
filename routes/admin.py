@@ -1112,7 +1112,7 @@ def edit_culture_class(cid):
 @admin_bp.route('/finance')
 @roles_required('admin','finance')
 def finance():
-    from routes.family import _is_adult
+    from routes.family import _is_adult, _is_late
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur); plist = _periods_list(cur)
     pid = request.args.get('pid', period['id'] if period else None)
@@ -1140,6 +1140,7 @@ def finance():
         pa_fee     = float(sel.get('pa_assignment_deposit') or 0) if sel else 0
         disc_per   = float(sel.get('discount') or 0) if sel else 0
         tuition    = float(sel.get('tuition') or 0) if sel else 0
+        late_fee   = float(sel.get('late_fee') or 0) if (sel and _is_late(sel)) else 0
 
         cur.execute("""
             SELECT s.id, s.fid, s.last_name, s.first_name, s.is_adult, s.mfcs_affiliation,
@@ -1185,6 +1186,7 @@ def finance():
             r['student_subtotal'] = sum(s['student_fee'] for s in details)
             r['reg_fee']     = reg_fee
             r['pa_fee']      = pa_fee
+            r['late_fee']    = late_fee
             r['multi_disc']  = multi_disc
             r['extra_kids']  = extra_kids
             r['discount_per']= disc_per

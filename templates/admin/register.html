@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Register for Classes — Monmouth Fidelity Chinese School{% endblock %}
+
+{% block navbar %}
+{% include 'family/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Class Registration</h2>
+<p class="text-muted mb-1">{{ period.name }}</p>
+
+<!-- Fee info notice -->
+<div class="alert alert-info small mb-4">
+  <strong>Fee information for {{ period.name }}:</strong>
+  <ul class="mb-0 mt-1">
+    <li>Students <strong>under 18</strong>: Tuition
+      <strong>${{ "%.2f"|format(eff_tuition|default(period.tuition) or 0) }}</strong>
+      + cultural program fee(s)
+      {% if tuition_type == 'grandfathered' %}
+      <span class="badge bg-success ms-1">Returning family rate</span>
+      {% endif %}
+    </li>
+    <li>Students <strong>18 or older</strong>: Cultural program fee(s) only — no tuition charge</li>
+    <li>Language program: included in tuition — no extra charge</li>
+    <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
+    <li>Registration fee (per family):
+      <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
+    <li>PA Assignment Duty deposit — refundable (per family):
+      <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+    {% if period.discount and period.discount|float > 0 %}
+    <li>Multi-child discount: families with <strong>3 or more children under 18</strong>
+      enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
+      discount per child</strong> for the 3rd child and beyond</li>
+    {% endif %}
+    {% if is_late and period.late_fee and period.late_fee|float > 0 %}
+    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(period.late_fee|float) }}</strong>
+      — the registration deadline has passed</li>
+    {% endif %}
+  </ul>
+</div>
+
+{% if not students %}
+<div class="card p-4 text-center text-muted">
+  No students found.
+  <a href="{{ url_for('family.new_student') }}">Add a student first →</a>
+</div>
+{% else %}
+<form method="post"
+      action="{{ url_for('family.submit_registration', period_id=period.id) }}">
+
+  {% for s in students %}
+  {% set ex = existing.get(s.id) %}
+
+  <div class="card p-4 mb-3">
+
+    <!-- Student header -->
+    <div class="mb-3">
+      <h5 class="mb-0">
+        {{ s.last_name }}, {{ s.first_name }}
+        {% if s.chinese_name and s.chinese_name != '?' %}
+        <small class="text-muted">{{ s.chinese_name }}</small>
+        {% endif %}
+        {% if s._is_adult %}
+        <span class="badge bg-secondary ms-1" style="font-size:.75rem">Adult</span>
+        {% endif %}
+      </h5>
+      {% if s.birthday and s.birthday|string not in ('2999-01-01','None') %}
+      <div class="small text-muted">Date of birth: {{ s.birthday }}</div>
+      {% else %}
+      <div class="small text-warning">
+        ⚠ No date of birth on file —
+        <a href="{{ url_for('family.edit_student', student_id=s.id) }}">add it</a>
+        to ensure correct fee calculation.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="row g-3">
+
+      <!-- Language program — minors only -->
+      {% if not s._is_adult %}
+      <div class="col-12 col-md-4">
+        <label class="form-label fw-500">Language Program</label>
+        <select name="lang_{{ s.id }}" class="form-select">
+          <option value="0">— None —</option>
+          {% for lc in lang_classes %}
+          <option value="{{ lc.id }}"
+            {% if ex and ex.lcgrid == lc.id %}selected{% endif %}>
+            {{ lc.name }}
+            {% if lc.chinese_name and lc.chinese_name not in ('?','') %}
+              ({{ lc.chinese_name }})
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Included in tuition.</div>
+      </div>
+      {% endif %}
+
+      <!-- Culture class 1 -->
+      <div class="{% if not s._is_adult %}col-12 col-md-4{% else %}col-12 col-md-6{% endif %}">
+        <label class="form-label fw-500">
+          Cultural Program 1
+        </label>
+        <select name="cult_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
+                id="cult1_{{ s.id }}">
+          <option value="0">— None —</option>
+          {% set cult_list = cult_classes_adult if s._is_adult else cult_classes_minor %}
+          {% for cc in cult_list %}
+          <option value="{{ cc.id }}"
+            {% if ex and ex.ccgrid == cc.id %}selected{% endif %}>
+            {{ cc.name }}
+            {% if cc.chinese_name and cc.chinese_name not in ('?','') %}
+              ({{ cc.chinese_name }})
+            {% endif %}
+            {% if cc.fee and cc.fee|float > 0 %}
+              {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
+                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+              {% else %}
+                — ${{ "%.0f"|format(cc.fee|float) }}
+              {% endif %}
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Culture class 2 -->
+      <div class="{% if not s._is_adult %}col-12 col-md-4{% else %}col-12 col-md-6{% endif %}">
+        <label class="form-label fw-500">
+          Cultural Program 2
+          <span class="text-muted fw-400 small">(optional)</span>
+        </label>
+        <select name="cult2_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
+                id="cult2_{{ s.id }}">
+          <option value="0">— None —</option>
+          {% set cult_list2 = cult_classes_adult_second if s._is_adult else cult_classes_second_minor %}
+          {% for cc in cult_list2 %}
+          <option value="{{ cc.id }}"
+            {% if ex and ex.ccgrid2 == cc.id %}selected{% endif %}>
+            {{ cc.name }}
+            {% if cc.chinese_name and cc.chinese_name not in ('?','') %}
+              ({{ cc.chinese_name }})
+            {% endif %}
+            {% if cc.fee and cc.fee|float > 0 %}
+              {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
+                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+              {% else %}
+                — ${{ "%.0f"|format(cc.fee|float) }}
+              {% endif %}
+            {% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Cannot be the same as Cultural Program 1.</div>
+      </div>
+
+    </div><!-- row -->
+  </div><!-- card -->
+  {% endfor %}
+
+  <!-- Family fees reminder -->
+  <div class="card p-3 mb-3 bg-light border-0">
+    <div class="small">
+      Added once for your family:
+      <strong>Registration fee ${{ "%.2f"|format(period.registration_fee or 0) }}</strong>
+      &nbsp;+&nbsp;
+      <strong>PA Assignment Duty deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong>
+      <span class="text-muted">(PA deposit is refundable upon completion of duty)</span>
+    </div>
+  </div>
+
+  <!-- Refund policy -->
+  <div class="card p-3 mb-4" style="border-left:4px solid #ffc107">
+    <div class="small">
+      <strong>Refund Policy:</strong> For new students only, withdrawal within the first
+      4 classes of the school year — 80% refund of tuition only.
+      All other paid fees are non-refundable.
+    </div>
+  </div>
+
+  <!-- Live fee summary -->
+  <div class="card p-4 mb-4" style="border-left:4px solid #27ae60">
+    <h6 class="mb-3">📋 Estimated Fee Summary</h6>
+    <table class="table table-sm mb-3">
+      <thead class="table-light">
+        <tr>
+          <th>Student</th>
+          <th>Tuition</th>
+          <th>Culture Fee</th>
+          <th class="text-end">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody id="fee-rows">
+        <tr><td colspan="4" class="text-muted small text-center">Select classes above to see fees</td></tr>
+      </tbody>
+      <tfoot id="fee-foot" style="display:none">
+        <tr class="border-top">
+          <td colspan="3" class="text-muted small">Registration fee (per family)</td>
+          <td class="text-end text-muted small">${{ "%.2f"|format(period.registration_fee or 0) }}</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
+          <td class="text-end text-muted small">${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</td>
+        </tr>
+        {% if period.late_fee and period.late_fee|float > 0 and is_late %}
+        <tr class="text-danger">
+          <td colspan="3" class="small">Late registration fee</td>
+          <td class="text-end small">${{ "%.2f"|format(period.late_fee|float) }}</td>
+        </tr>
+        {% endif %}
+        <tr id="discount-row" style="display:none">
+          <td colspan="3" class="text-success small">Multi-child discount</td>
+          <td class="text-end text-success small" id="discount-amount"></td>
+        </tr>
+        <tr class="fw-bold table-light">
+          <td colspan="3">Total Due</td>
+          <td class="text-end" id="total-due"></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="alert alert-warning small mb-0">
+      ⚠ Your registration will be <strong>Pending</strong> until payment is received
+      by the finance team. You will receive a confirmation email once your payment
+      has been processed.
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-family px-4">Submit Registration</button>
+    <a href="{{ url_for('family.dashboard') }}"
+       class="btn btn-outline-secondary">Cancel</a>
+  </div>
+</form>
+{% endif %}
+
+<!-- Culture class enforcement + Fee calculator -->
+<script>
+// Culture class 2: disabled until culture class 1 selected; prevents duplicates
+document.querySelectorAll('form select[id^="cult1_"]').forEach(function(sel1){
+  const sid = sel1.id.replace('cult1_','');
+  const sel2 = document.getElementById('cult2_'+sid);
+  if(!sel2) return;
+  function enforce(){
+    if(!sel1.value||sel1.value==='0'){ sel2.value='0'; sel2.disabled=true; }
+    else { sel2.disabled=false; if(sel2.value&&sel2.value===sel1.value) sel2.value='0'; }
+  }
+  sel1.addEventListener('change', enforce);
+  sel2.addEventListener('change', function(){
+    if(!sel1.value||sel1.value==='0'){ sel2.value='0'; sel2.disabled=true; }
+    else if(sel2.value===sel1.value) sel2.value='0';
+  });
+  enforce();
+});
+
+// Fee calculator
+const TUITION  = {{ eff_tuition|default(period.tuition) or 0 }};
+{% if tuition_type == 'grandfathered' %}
+// Grandfathered tuition rate applied for this family
+{% endif %}
+const REG_FEE  = {{ period.registration_fee or 0 }};
+const PA_DEP   = {{ period.pa_assignment_deposit or 0 }};
+const DISCOUNT = {{ period.discount|float if period.discount else 0 }};
+const LATE_FEE = {{ period.late_fee|float if (period.late_fee and period.deadline and period.deadline|string < now_date) else 0 }};
+const STUDENTS = [{% for s in students %}
+  {sid:{{s.id}},name:"{{s.last_name}}, {{s.first_name}}",isAdult:{{s._is_adult|lower}},mfcs:{{('true' if s.mfcs_affiliation == 'Y' else 'false')}}}{% if not loop.last %},{% endif %}
+{% endfor %}];
+const CULT_FEES = { {% for c in cult_classes_all %}"{{c.id}}":{{c.fee or 0}},{% endfor %} };
+const CULT_DISC = { {% for c in cult_classes_all %}"{{c.id}}":{{c.discount or 0}},{% endfor %} };
+const CULT_NAMES = { {% for c in cult_classes_all %}"{{c.id}}":"{{c.name}}",{% endfor %} };
+const LANG_NAMES = { {% for c in lang_classes %}"{{c.id}}":"{{c.name}}",{% endfor %} };
+
+function fmt(n){ return '$' + parseFloat(n).toFixed(2); }
+
+function calcFees(){
+  let sub = 0, minors = 0, rows = '', hasAny = false;
+  STUDENTS.forEach(function(s){
+    const langSel  = document.querySelector('select[name="lang_'+s.sid+'"]');
+    const cultSel  = document.querySelector('select[name="cult_'+s.sid+'"]');
+    const cult2Sel = document.querySelector('select[name="cult2_'+s.sid+'"]');
+    const cid  = cultSel  && cultSel.value  !== '0' ? cultSel.value  : '';
+    const cid2 = cult2Sel && cult2Sel.value !== '0' ? cult2Sel.value : '';
+    const cf1_raw = CULT_FEES[cid]  || 0;
+    const cf2_raw = CULT_FEES[cid2] || 0;
+    const disc1 = s.mfcs ? (CULT_DISC[cid]  || 0) : 0;
+    const disc2 = s.mfcs ? (CULT_DISC[cid2] || 0) : 0;
+    const cf1 = Math.max(0, cf1_raw - disc1);
+    const cf2 = Math.max(0, cf2_raw - disc2);
+    const langVal = langSel && langSel.value && langSel.value !== '0' ? langSel.value : '';
+    const hasSelection = !!(cid || cid2 || langVal);
+    const tuit = (s.isAdult || !hasSelection) ? 0 : TUITION;
+    const stFee = hasSelection ? (tuit + cf1 + cf2) : 0;
+    sub += stFee;
+    if(!s.isAdult && hasSelection) minors++;
+    if(hasSelection) hasAny = true;
+    rows += '<tr><td>'+s.name+'</td>'
+          + '<td>'+(hasSelection && !s.isAdult ? fmt(tuit) : '<span class="text-muted">—</span>')+'</td>'
+          + '<td>'+((cf1+cf2)>0?fmt(cf1+cf2)+'<br><small class="text-muted">'+(CULT_NAMES[cid]||'')+(cid2?' + '+(CULT_NAMES[cid2]||''):'')+'</small>':'—')+'</td>'
+          + '<td class="text-end">'+(hasSelection ? fmt(stFee) : '<span class="text-muted">—</span>')+'</td></tr>';
+  });
+  document.getElementById('fee-rows').innerHTML = rows || '<tr><td colspan="4" class="text-muted small text-center">Select classes above to see fees</td></tr>';
+  const extra = Math.max(0, minors-2);
+  const disc  = extra * DISCOUNT;
+  const total = sub + REG_FEE + PA_DEP + LATE_FEE - disc;
+  const dr = document.getElementById('discount-row');
+  if(dr){ dr.style.display = disc>0?'':'none'; }
+  const da = document.getElementById('discount-amount');
+  if(da) da.textContent = '-'+fmt(disc)+' ('+extra+' child'+(extra>1?'ren':'')+' × '+fmt(DISCOUNT)+')';
+  const td = document.getElementById('total-due');
+  if(td) td.textContent = fmt(total);
+  document.getElementById('fee-foot').style.display = hasAny ? '' : 'none';
+}
+document.querySelectorAll('select').forEach(function(s){ s.addEventListener('change', calcFees); });
+calcFees();
+</script>
+{% endblock %}

@@ -187,19 +187,37 @@ def _effective_tuition(period, family_id, conn):
 
     return std_tuition, 'standard (past deadline)' 
 
+def _is_late(period):
+    """Return True if today is past the registration deadline."""
+    deadline = period.get('deadline')
+    if not deadline:
+        return False
+    try:
+        from datetime import datetime as dt
+        if isinstance(deadline, str):
+            deadline = dt.strptime(deadline, '%Y-%m-%d').date()
+        else:
+            deadline = deadline  # already a date object
+        return date.today() > deadline
+    except Exception:
+        return False
+
+
 def _calc_total_family_fee(student_subtotal, period, minor_count=0):
     """
     Add once-per-family fees:
       + registration_fee
       + pa_assignment_deposit  (refundable, but still collected up front)
+      + late_fee               (if today > period.deadline)
       - period.discount per minor beyond the first 2 (multi-kid discount)
     """
     reg_fee           = float(period.get('registration_fee') or 0)
     pa_fee            = float(period.get('pa_assignment_deposit') or 0)
+    late_fee          = float(period.get('late_fee') or 0) if _is_late(period) else 0
     per_kid_discount  = float(period.get('discount') or 0)
     additional_kids   = max(0, minor_count - 2)
     multi_kid_discount = additional_kids * per_kid_discount
-    return student_subtotal + reg_fee + pa_fee - multi_kid_discount
+    return student_subtotal + reg_fee + pa_fee + late_fee - multi_kid_discount
 
 
 # ── login / logout ─────────────────────────────────────────────────────────────
@@ -819,7 +837,9 @@ def register_classes(period_id):
                            cult_classes_second_minor=cult_classes_second_minor,
                            existing=existing,
                            eff_tuition=eff_tuition,
-                           tuition_type=tuition_type)
+                           tuition_type=tuition_type,
+                           is_late=_is_late(period),
+                           now_date=date.today().strftime('%Y-%m-%d'))
 
 
 @family_bp.route('/register/<int:period_id>/submit', methods=['POST'])
@@ -1216,11 +1236,12 @@ def fee_summary(period_id):
                      'fee_note':    fee_note,
                      'is_adult':    adult})
 
-    # Multi-kid discount
+    # Multi-kid discount and late fee
     discount_per = float(period.get('discount') or 0) if period else 0
     extra_kids   = max(0, minor_count - 2)
     multi_disc   = extra_kids * discount_per
-    grand_total  = student_subtotal + reg_fee + pa_fee - multi_disc
+    late_fee     = float(period.get('late_fee') or 0) if (period and _is_late(period)) else 0
+    grand_total  = student_subtotal + reg_fee + pa_fee + late_fee - multi_disc
 
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,
@@ -1228,6 +1249,7 @@ def fee_summary(period_id):
                            student_subtotal=student_subtotal,
                            reg_fee=reg_fee,
                            pa_fee=pa_fee,
+                           late_fee=late_fee,
                            multi_disc=multi_disc,
                            extra_kids=extra_kids,
                            discount_per=discount_per,

@@ -187,6 +187,12 @@
                   <td colspan="8" class="text-end text-muted small">PA Assignment Duty deposit</td>
                   <td class="text-end">${{ '%.2f'|format(r.pa_fee) }}</td>
                 </tr>
+                {% if r.late_fee and r.late_fee > 0 %}
+                <tr class="text-danger">
+                  <td colspan="8" class="text-end small">Late registration fee</td>
+                  <td class="text-end">${{ '%.2f'|format(r.late_fee) }}</td>
+                </tr>
+                {% endif %}
                 {% if r.multi_disc > 0 %}
                 <tr class="text-success">
                   <td colspan="8" class="text-end small">Multi-child discount ({{ r.extra_kids }} × ${{ '%.2f'|format(r.discount_per) }})</td>
