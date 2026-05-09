@@ -32,6 +32,11 @@
       enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
+<!-- DEBUG: is_late={{ is_late }}, late_fee_amount={{ late_fee_amount }} -->
+    {% if is_late %}
+    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(late_fee_amount) }}</strong>
+      — the registration deadline has passed</li>
+    {% endif %}
   </ul>
 </div>
 
@@ -199,6 +204,12 @@
           <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
           <td class="text-end text-muted small">${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</td>
         </tr>
+        {% if is_late %}
+        <tr class="text-danger">
+          <td colspan="3" class="small">Late registration fee</td>
+          <td class="text-end small">${{ "%.2f"|format(late_fee_amount) }}</td>
+        </tr>
+        {% endif %}
         <tr id="discount-row" style="display:none">
           <td colspan="3" class="text-success small">Multi-child discount</td>
           <td class="text-end text-success small" id="discount-amount"></td>
@@ -251,6 +262,7 @@ const TUITION  = {{ eff_tuition|default(period.tuition) or 0 }};
 const REG_FEE  = {{ period.registration_fee or 0 }};
 const PA_DEP   = {{ period.pa_assignment_deposit or 0 }};
 const DISCOUNT = {{ period.discount|float if period.discount else 0 }};
+const LATE_FEE = {{ late_fee_amount }};
 const STUDENTS = [{% for s in students %}
   {sid:{{s.id}},name:"{{s.last_name}}, {{s.first_name}}",isAdult:{{s._is_adult|lower}},mfcs:{{('true' if s.mfcs_affiliation == 'Y' else 'false')}}}{% if not loop.last %},{% endif %}
 {% endfor %}];
@@ -290,7 +302,7 @@ function calcFees(){
   document.getElementById('fee-rows').innerHTML = rows || '<tr><td colspan="4" class="text-muted small text-center">Select classes above to see fees</td></tr>';
   const extra = Math.max(0, minors-2);
   const disc  = extra * DISCOUNT;
-  const total = sub + REG_FEE + PA_DEP - disc;
+  const total = sub + REG_FEE + PA_DEP + LATE_FEE - disc;
   const dr = document.getElementById('discount-row');
   if(dr){ dr.style.display = disc>0?'':'none'; }
   const da = document.getElementById('discount-amount');
