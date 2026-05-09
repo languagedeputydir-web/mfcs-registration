@@ -97,7 +97,8 @@ def _recalc_family_record(cur, fid, pid):
     from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee
     cur.execute("""SELECT s.birthday, s.is_adult, s.mfcs_affiliation,
         sr.lcgrid, sr.ccgrid, sr.ccgrid2,
-        COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
+        COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
+        COALESCE(cc.discount,0) AS cult_disc, COALESCE(cc2.discount,0) AS cult_disc2
         FROM student s
         JOIN student_record sr ON sr.sid=s.id
         LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
@@ -109,7 +110,9 @@ def _recalc_family_record(cur, fid, pid):
     for r in rows:
         student_subtotal += _calc_student_fee(
             r, period,
-            float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0)
+            float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0),
+            cult_discount=float(r['cult_disc'] or 0),
+            cult_discount2=float(r['cult_disc2'] or 0)
         )
     minor_count = sum(1 for r in rows if not _is_adult(r))
     new_total = _calc_total_family_fee(student_subtotal, period, minor_count)

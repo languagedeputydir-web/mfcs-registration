@@ -114,24 +114,25 @@ def _validate_phone(val):
         return 'Phone number is too long (max 15 digits).'
     return None
 
-def _calc_student_fee(student, period, cult_fee, cult_fee2=0, tuition_override=None):
+def _calc_student_fee(student, period, cult_fee, cult_fee2=0, tuition_override=None,
+                      cult_discount=0, cult_discount2=0):
     """
     Per-student fee:
       adult (is_adult=1) → culture fees only (up to 2 classes)
-        - if mfcs_affiliation='Y' → apply period discount per culture class
+        - if mfcs_affiliation='Y' → apply class-level discount per culture class
       minor (is_adult=0)  → tuition + culture fees (up to 2 classes)
     tuition_override: use this instead of period.tuition (for grandfathered rate)
+    cult_discount/cult_discount2: per-class MFCS discount amount
     """
     if tuition_override is not None:
         tuition = float(tuition_override)
     else:
         tuition = float(period.get('tuition') or 0)
 
-    # Apply MFCS affiliation discount to culture fees for adult members
+    # Apply MFCS affiliation discount to culture fees for affiliated adults
     mfcs = student.get('mfcs_affiliation') == 'Y'
-    mfcs_discount = float(period.get('discount') or 0) if mfcs else 0
-    cf1 = max(0, float(cult_fee  or 0) - mfcs_discount)
-    cf2 = max(0, float(cult_fee2 or 0) - mfcs_discount)
+    cf1 = max(0, float(cult_fee  or 0) - (float(cult_discount  or 0) if mfcs else 0))
+    cf2 = max(0, float(cult_fee2 or 0) - (float(cult_discount2 or 0) if mfcs else 0))
     culture = cf1 + cf2
 
     if _is_adult(student):
@@ -833,10 +834,12 @@ def submit_registration(period_id):
     students = {s['id']: s for s in cur.fetchall()}
 
     cur.execute(
-        "SELECT id, fee FROM class_group_record "
+        "SELECT id, fee, discount FROM class_group_record "
         "WHERE pid = %s AND type = 'culture'", (period_id,)
     )
-    cult_fee_map = {r['id']: float(r['fee']) for r in cur.fetchall()}
+    cult_rows = cur.fetchall()
+    cult_fee_map      = {r['id']: float(r['fee'] or 0)      for r in cult_rows}
+    cult_discount_map = {r['id']: float(r['discount'] or 0) for r in cult_rows}
 
     # Determine effective tuition (standard vs grandfathered)
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn)
@@ -865,8 +868,11 @@ def submit_registration(period_id):
 
         cult_fee_amount  = cult_fee_map.get(cid, 0)  if cid  else 0
         cult_fee_amount2 = cult_fee_map.get(cid2, 0) if cid2 else 0
+        cult_disc1 = cult_discount_map.get(cid, 0)  if cid  else 0
+        cult_disc2 = cult_discount_map.get(cid2, 0) if cid2 else 0
         student_fee = _calc_student_fee(student, period, cult_fee_amount,
-                                        cult_fee_amount2, eff_tuition)
+                                        cult_fee_amount2, eff_tuition,
+                                        cult_disc1, cult_disc2)
         student_subtotal += student_fee
         if not _is_adult(student):
             minor_count += 1
