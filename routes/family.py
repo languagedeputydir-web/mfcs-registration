@@ -636,26 +636,38 @@ def new_student():
         conn = get_db_connection()
         cur  = conn.cursor()
         bday = f.get('birthday', '').strip() or '2999-01-01'
-        cur.execute(
-            """
-            INSERT INTO student
-              (fid, last_name, first_name, chinese_name,
-               gender, birthday, phone, email,
-               ec_last_name, ec_first_name, ec_phone,
-               special_note, media_consent, is_adult, mfcs_affiliation)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """,
-            (current_user.id, last, first,
-             f.get('chinese_name', '?'), f.get('gender', '?'),
-             bday, f.get('phone', '?'), f.get('email', '?'),
-             f.get('ec_last_name', '?'), f.get('ec_first_name', '?'),
-             f.get('ec_phone', '?'), f.get('special_note', ''),
-             media_consent, is_adult_val, mfcs_aff)
-        )
-        conn.commit()
-        conn.close()
-        flash(f'{first} {last} has been added.', 'success')
-        return redirect(url_for('family.students'))
+        email_val = f.get('email', '').strip()
+        # Don't store empty/placeholder email — use NULL to avoid unique constraint issues
+        email_val = email_val if email_val and email_val != '?' else None
+        try:
+            cur.execute(
+                """
+                INSERT INTO student
+                  (fid, last_name, first_name, chinese_name,
+                   gender, birthday, phone, email,
+                   ec_last_name, ec_first_name, ec_phone,
+                   special_note, media_consent, is_adult, mfcs_affiliation)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (current_user.id, last, first,
+                 f.get('chinese_name', '?'), f.get('gender', '?'),
+                 bday, f.get('phone', '?'), email_val,
+                 f.get('ec_last_name', '?'), f.get('ec_first_name', '?'),
+                 f.get('ec_phone', '?'), f.get('special_note', ''),
+                 media_consent, is_adult_val, mfcs_aff)
+            )
+            conn.commit()
+            conn.close()
+            flash(f'{first} {last} has been added.', 'success')
+            return redirect(url_for('family.students'))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash('A student with that email already exists. Please use a different email or leave it blank.', 'error')
+            else:
+                flash(f'Error adding student: {e}', 'error')
+            return render_template('family/student_form.html', student=None, action='new',
+                                   family=current_user)
     return render_template('family/student_form.html', student=None, action='new',
                            family=current_user)
 
