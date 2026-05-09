@@ -637,8 +637,8 @@ def new_student():
         cur  = conn.cursor()
         bday = f.get('birthday', '').strip() or '2999-01-01'
         email_val = f.get('email', '').strip()
-        # Don't store empty/placeholder email — use NULL to avoid unique constraint issues
-        email_val = email_val if email_val and email_val != '?' else None
+        if not email_val or email_val == '?':
+            email_val = ''
         try:
             cur.execute(
                 """
@@ -705,6 +705,13 @@ def edit_student(student_id):
         media_consent = int(media_consent) if media_consent in ('0','1') else None
         is_adult_val = 1 if f.get('is_adult') == '1' else 0
         mfcs_aff = f.get('mfcs_affiliation') if is_adult_val else None
+        email_val = f.get('email', '').strip()
+        if not email_val or email_val == '?':
+            existing_email = student.get('email', '') or ''
+            if existing_email and existing_email != '?' and not existing_email.endswith('@placeholder.invalid'):
+                email_val = existing_email
+            else:
+                email_val = ''
         cur2 = conn.cursor()
         cur2.execute(
                 """
@@ -718,7 +725,7 @@ def edit_student(student_id):
                 """,
                 (last, first,
                  f.get('chinese_name', '?'), f.get('gender', '?'),
-                 bday, f.get('phone', '?'), f.get('email', '?'),
+                 bday, f.get('phone', '?'), email_val,
                  f.get('ec_last_name', '?'), f.get('ec_first_name', '?'),
                  f.get('ec_phone', '?'), f.get('special_note', ''),
                  media_consent, is_adult_val, mfcs_aff,
