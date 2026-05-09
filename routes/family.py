@@ -193,13 +193,19 @@ def _is_late(period):
     if not deadline:
         return False
     try:
-        from datetime import datetime as dt
         if isinstance(deadline, str):
-            deadline = dt.strptime(deadline, '%Y-%m-%d').date()
+            from datetime import datetime as dt
+            deadline_date = dt.strptime(deadline, '%Y-%m-%d').date()
+        elif hasattr(deadline, 'year'):
+            # Already a date or datetime object
+            deadline_date = deadline if isinstance(deadline, date) else deadline.date()
         else:
-            deadline = deadline  # already a date object
-        return date.today() > deadline
-    except Exception:
+            return False
+        result = date.today() > deadline_date
+        print(f'_is_late: today={date.today()}, deadline={deadline_date}, result={result}', flush=True)
+        return result
+    except Exception as e:
+        print(f'_is_late error: {e}', flush=True)
         return False
 
 
