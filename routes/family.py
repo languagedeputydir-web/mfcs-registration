@@ -779,13 +779,13 @@ def register_classes(period_id):
     )
     all_cult_classes = cur.fetchall()
 
-    # Per-student culture class lists (filter adult_only based on age)
-    # cult_classes_by_student built in template using _is_adult flag on student
-    cult_classes = all_cult_classes          # used for non-age-filtered contexts
-    cult_classes_second = [c for c in all_cult_classes if c.get('allow_as_second', 1)]
-    cult_classes_all = all_cult_classes      # full list for adults
-    cult_classes_minor = [c for c in all_cult_classes if not c.get('adult_only', 0)]
-    cult_classes_second_minor = [c for c in cult_classes_second if not c.get('adult_only', 0)]
+    # Per-student culture class lists
+    cult_classes_all          = all_cult_classes  # for JS fee lookup only
+    cult_classes_adult        = [c for c in all_cult_classes if c.get('adult_only', 0)]
+    cult_classes_adult_second = [c for c in cult_classes_adult if c.get('allow_as_second', 1)]
+    cult_classes_minor        = [c for c in all_cult_classes if not c.get('adult_only', 0)]
+    cult_classes_second_minor = [c for c in all_cult_classes
+                                 if not c.get('adult_only', 0) and c.get('allow_as_second', 1)]
 
     existing = {}
     for s in students:
@@ -813,9 +813,10 @@ def register_classes(period_id):
                            students=students,
                            lang_classes=lang_classes,
                            cult_classes_all=cult_classes_all,
+                           cult_classes_adult=cult_classes_adult,
+                           cult_classes_adult_second=cult_classes_adult_second,
                            cult_classes_minor=cult_classes_minor,
                            cult_classes_second_minor=cult_classes_second_minor,
-                           cult_classes_second=cult_classes_second,
                            existing=existing,
                            eff_tuition=eff_tuition,
                            tuition_type=tuition_type)

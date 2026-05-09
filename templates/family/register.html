@@ -101,7 +101,7 @@
         <select name="cult_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
                 id="cult1_{{ s.id }}">
           <option value="0">— None —</option>
-          {% set cult_list = cult_classes_all if s._is_adult else cult_classes_minor %}
+          {% set cult_list = cult_classes_adult if s._is_adult else cult_classes_minor %}
           {% for cc in cult_list %}
           <option value="{{ cc.id }}"
             {% if ex and ex.ccgrid == cc.id %}selected{% endif %}>
@@ -110,7 +110,11 @@
               ({{ cc.chinese_name }})
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
-              — ${{ "%.0f"|format(cc.fee|float) }}
+              {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
+                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+              {% else %}
+                — ${{ "%.0f"|format(cc.fee|float) }}
+              {% endif %}
             {% endif %}
           </option>
           {% endfor %}
@@ -126,7 +130,7 @@
         <select name="cult2_{{ s.id }}" class="form-select cult-select-{{ s.id }}"
                 id="cult2_{{ s.id }}">
           <option value="0">— None —</option>
-          {% set cult_list2 = cult_classes_second if s._is_adult else cult_classes_second_minor %}
+          {% set cult_list2 = cult_classes_adult_second if s._is_adult else cult_classes_second_minor %}
           {% for cc in cult_list2 %}
           <option value="{{ cc.id }}"
             {% if ex and ex.ccgrid2 == cc.id %}selected{% endif %}>
@@ -135,7 +139,11 @@
               ({{ cc.chinese_name }})
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
-              — ${{ "%.0f"|format(cc.fee|float) }}
+              {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
+                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+              {% else %}
+                — ${{ "%.0f"|format(cc.fee|float) }}
+              {% endif %}
             {% endif %}
           </option>
           {% endfor %}
