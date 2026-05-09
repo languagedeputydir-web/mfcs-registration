@@ -267,13 +267,13 @@ function calcFees(){
     const disc2 = s.mfcs ? (CULT_DISC[cid2] || 0) : 0;
     const cf1 = Math.max(0, cf1_raw - disc1);
     const cf2 = Math.max(0, cf2_raw - disc2);
-    const tuit = s.isAdult ? 0 : TUITION;
+    const tuit = (s.isAdult || !langSel || !langSel.value) ? 0 : TUITION;
     const stFee = tuit + cf1 + cf2;
     sub += stFee;
-    if(!s.isAdult) minors++;
+    if(!s.isAdult && langSel && langSel.value) minors++;
     if(cid || cid2 || (langSel && langSel.value) || s.isAdult) hasAny = true;
     rows += '<tr><td>'+s.name+'</td>'
-          + '<td>'+(s.isAdult?'<span class="text-muted">—</span>':fmt(tuit))+'</td>'
+          + '<td>'+(s.isAdult?'<span class="text-muted">—</span>':(tuit>0?fmt(tuit):'<span class="text-muted">—</span>'))+'</td>'
           + '<td>'+((cf1+cf2)>0?fmt(cf1+cf2)+'<br><small class="text-muted">'+(CULT_NAMES[cid]||'')+(cid2?' + '+(CULT_NAMES[cid2]||''):'')+'</small>':'—')+'</td>'
           + '<td class="text-end">'+fmt(stFee)+'</td></tr>';
   });
