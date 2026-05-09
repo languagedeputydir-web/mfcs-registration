@@ -84,10 +84,10 @@
       <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
       <td class="text-end">${{ "%.2f"|format(pa_fee) }}</td>
     </tr>
-    {% if late_fee and late_fee > 0 %}
+    {% if late_fee %}
     <tr class="text-danger">
       <td>Late registration fee</td>
-      <td class="text-end">${{ "%.2f"|format(late_fee) }}</td>
+      <td class="text-end">${{ "%.2f"|format(late_fee|float) }}</td>
     </tr>
     {% endif %}
     {% if multi_disc and multi_disc > 0 %}

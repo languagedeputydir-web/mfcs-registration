@@ -32,8 +32,8 @@
       enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
-    {% if is_late and period.late_fee and period.late_fee|float > 0 %}
-    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(period.late_fee|float) }}</strong>
+    {% if is_late %}
+    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format((period.late_fee or 0)|float) }}</strong>
       — the registration deadline has passed</li>
     {% endif %}
   </ul>
@@ -203,10 +203,10 @@
           <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
           <td class="text-end text-muted small">${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</td>
         </tr>
-        {% if period.late_fee and period.late_fee|float > 0 and is_late %}
+        {% if is_late %}
         <tr class="text-danger">
           <td colspan="3" class="small">Late registration fee</td>
-          <td class="text-end small">${{ "%.2f"|format(period.late_fee|float) }}</td>
+          <td class="text-end small">${{ "%.2f"|format((period.late_fee or 0)|float) }}</td>
         </tr>
         {% endif %}
         <tr id="discount-row" style="display:none">
