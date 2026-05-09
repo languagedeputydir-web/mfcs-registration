@@ -202,7 +202,6 @@ def _is_late(period):
         else:
             return False
         result = date.today() > deadline_date
-        print(f'_is_late: today={date.today()}, deadline={deadline_date}, result={result}', flush=True)
         return result
     except Exception as e:
         print(f'_is_late error: {e}', flush=True)
@@ -834,7 +833,6 @@ def register_classes(period_id):
 
     is_late_flag = _is_late(period)
     late_fee_amount = float(period.get('late_fee') or 0) if is_late_flag else 0.0
-    print(f'REGISTER DEBUG: is_late={is_late_flag}, period.late_fee={period.get("late_fee")}, type={type(period.get("late_fee"))}', flush=True)
     return render_template('family/register.html',
                            period=period,
                            students=students,

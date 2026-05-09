@@ -32,7 +32,6 @@
       enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
-<!-- DEBUG: is_late={{ is_late }}, late_fee_amount={{ late_fee_amount }} -->
     {% if is_late %}
     <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(late_fee_amount) }}</strong>
       — the registration deadline has passed</li>
