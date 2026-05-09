@@ -33,8 +33,8 @@
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
     {% if is_late %}
-    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(late_fee_amount) }}</strong>
-      — the registration deadline has passed</li>
+    <li class="text-danger"><strong>Late payment fee: ${{ "%.2f"|format(late_fee_amount) }} per minor student</strong>
+      — the payment deadline has passed</li>
     {% endif %}
   </ul>
 </div>

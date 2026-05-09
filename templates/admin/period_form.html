@@ -50,7 +50,9 @@
         </div>
       </div>
       <div class="col-6 col-md-4">
-        <label class="form-label small fw-500">Late Fee</label>
+        <label class="form-label small fw-500">Late Fee
+          <span class="text-muted fw-400">(per minor, for returning families)</span>
+        </label>
         <div class="input-group input-group-sm">
           <span class="input-group-text">$</span>
           <input type="number" name="late_fee" step="0.01" min="0" class="form-control"
@@ -93,7 +95,9 @@
     </div>
 
     <div class="mb-3">
-      <label class="form-label small fw-500">Registration Deadline</label>
+      <label class="form-label small fw-500">Payment Deadline
+        <span class="text-muted fw-400 small">— late fee applies to returning families who pay after this date</span>
+      </label>
       <input type="date" name="deadline" class="form-control" style="max-width:200px"
              value="{{ period.deadline if period and period.deadline|string != '2999-01-01' else '' }}">
     </div>

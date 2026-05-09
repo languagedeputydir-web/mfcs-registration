@@ -139,6 +139,25 @@
                   aria-expanded="false">
             Detail
           </button>
+          {% if r.late_fee_waived %}
+          <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-warning"
+                    title="Late fee waived — click to reinstate">
+              Late Fee Waived
+            </button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin.waive_late_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning"
+                    title="Click to waive late fee for this family">
+              Waive Late Fee
+            </button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       <tr class="collapse" id="detail-{{ r.fpr_id }}">

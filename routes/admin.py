@@ -94,7 +94,7 @@ def _recalc_family_record(cur, fid, pid):
     if not period:
         return 0.0, False
 
-    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee
+    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee, _should_charge_late_fee
     cur.execute("""SELECT s.birthday, s.is_adult, s.mfcs_affiliation,
         sr.lcgrid, sr.ccgrid, sr.ccgrid2,
         COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
@@ -115,7 +115,18 @@ def _recalc_family_record(cur, fid, pid):
             cult_discount2=float(r['cult_disc2'] or 0)
         )
     minor_count = sum(1 for r in rows if not _is_adult(r))
-    new_total = _calc_total_family_fee(student_subtotal, period, minor_count)
+
+    # Get current payment and waiver status
+    cur.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+    fpr_row = cur.fetchone() or {}
+    total_paid_so_far = float(fpr_row.get('total_paid') or 0)
+    late_fee_waived   = bool(fpr_row.get('late_fee_waived', 0))
+
+    charge_late, per_minor_late = _should_charge_late_fee(
+        period, fid, pid, total_paid_so_far, late_fee_waived, None
+    )
+    late_fee_total = minor_count * per_minor_late if charge_late else 0.0
+    new_total = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
     cur.execute(
         "SELECT id, total_due, reg_status, description FROM family_record "
@@ -1127,6 +1138,7 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
+            fr.late_fee_waived,
             COUNT(DISTINCT sr.sid) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
@@ -1364,6 +1376,30 @@ def new_family():
         flash('Family created.','success')
         return redirect(url_for('admin.family_detail', fid=new_id))
     return render_template('admin/new_family.html')
+
+@admin_bp.route('/payment/waive-late-fee', methods=['POST'])
+@roles_required('admin','finance')
+def waive_late_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid', '')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET late_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Late fee waived for this family.', 'success')
+    return redirect(url_for('admin.finance', pid=pid or None))
+
+
+@admin_bp.route('/payment/unwaive-late-fee', methods=['POST'])
+@roles_required('admin','finance')
+def unwaive_late_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid', '')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET late_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Late fee reinstated for this family.', 'success')
+    return redirect(url_for('admin.finance', pid=pid or None))
+
 
 @admin_bp.route('/payment/update', methods=['POST'])
 @roles_required('admin','finance')

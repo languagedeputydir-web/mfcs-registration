@@ -188,7 +188,7 @@ def _effective_tuition(period, family_id, conn):
     return std_tuition, 'standard (past deadline)' 
 
 def _is_late(period):
-    """Return True if today is past the registration deadline."""
+    """Return True if today is past the payment deadline."""
     deadline = period.get('deadline')
     if not deadline:
         return False
@@ -197,28 +197,61 @@ def _is_late(period):
             from datetime import datetime as dt
             deadline_date = dt.strptime(deadline, '%Y-%m-%d').date()
         elif hasattr(deadline, 'year'):
-            # Already a date or datetime object
             deadline_date = deadline if isinstance(deadline, date) else deadline.date()
         else:
             return False
-        result = date.today() > deadline_date
-        return result
+        return date.today() > deadline_date
     except Exception as e:
         print(f'_is_late error: {e}', flush=True)
         return False
 
 
-def _calc_total_family_fee(student_subtotal, period, minor_count=0):
+def _is_returning_family(family_id, current_pid, conn):
+    """Return True if the family has a family_record in any previous period."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT COUNT(*) AS n FROM family_record WHERE fid=%s AND pid != %s",
+        (family_id, current_pid)
+    )
+    row = cur.fetchone()
+    return (row['n'] > 0) if row else False
+
+
+def _should_charge_late_fee(period, family_id, current_pid, total_paid, late_fee_waived, conn):
+    """
+    Returns (charge_late, minor_late_fee) where:
+      charge_late     = True if late fee should be applied
+      minor_late_fee  = per-minor late fee amount
+    Rules:
+      1. New family → no late fee
+      2. Returning family + today > deadline + total_paid = 0 → late fee per minor
+      3. Returning family + total_paid > 0 → no late fee (payment received)
+      4. Finance waived → no late fee
+    """
+    if late_fee_waived:
+        return False, 0.0
+    if not _is_late(period):
+        return False, 0.0
+    if float(total_paid or 0) > 0:
+        return False, 0.0
+    # Check if returning family — needs a DB connection
+    if conn is None:
+        return False, 0.0
+    if not _is_returning_family(family_id, current_pid, conn):
+        return False, 0.0
+    return True, float(period.get('late_fee') or 0)
+
+
+def _calc_total_family_fee(student_subtotal, period, minor_count=0, late_fee=0.0):
     """
     Add once-per-family fees:
       + registration_fee
-      + pa_assignment_deposit  (refundable, but still collected up front)
-      + late_fee               (if today > period.deadline)
+      + pa_assignment_deposit  (refundable)
+      + late_fee               (per minor, for returning families past payment deadline)
       - period.discount per minor beyond the first 2 (multi-kid discount)
     """
     reg_fee           = float(period.get('registration_fee') or 0)
     pa_fee            = float(period.get('pa_assignment_deposit') or 0)
-    late_fee          = float(period.get('late_fee') or 0) if _is_late(period) else 0
     per_kid_discount  = float(period.get('discount') or 0)
     additional_kids   = max(0, minor_count - 2)
     multi_kid_discount = additional_kids * per_kid_discount
@@ -832,7 +865,22 @@ def register_classes(period_id):
     conn2.close()
 
     is_late_flag = _is_late(period)
-    late_fee_amount = float(period.get('late_fee') or 0) if is_late_flag else 0.0
+    # Get current payment status for late fee check
+    cur.execute(
+        "SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
+        (current_user.id, period_id)
+    )
+    fpr_row = cur.fetchone()
+    total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
+    late_fee_waived   = bool((fpr_row or {}).get('late_fee_waived', 0))
+
+    conn2 = get_db_connection()
+    charge_late, per_minor_late = _should_charge_late_fee(
+        period, current_user.id, period_id,
+        total_paid_so_far, late_fee_waived, conn2
+    )
+    conn2.close()
+    late_fee_amount = per_minor_late if charge_late else 0.0
     return render_template('family/register.html',
                            period=period,
                            students=students,
@@ -932,8 +980,14 @@ def submit_registration(period_id):
                 if '1062' not in str(e) and 'Duplicate' not in str(e):
                     raise
 
-    # Total = student fees + registration fee + PA deposit - multi-kid discount
-    total_due = _calc_total_family_fee(student_subtotal, period, minor_count)
+    # Determine late fee: per-minor, returning families only, unpaid past deadline
+    charge_late, per_minor_late = _should_charge_late_fee(
+        period, current_user.id, period_id, 0, False, conn
+    )
+    late_fee_total = minor_count * per_minor_late if charge_late else 0.0
+
+    # Total = student fees + registration fee + PA deposit + late fee - multi-kid discount
+    total_due = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
     cur.execute(
         "SELECT id, total_due AS old_total, reg_status FROM family_record "
@@ -1008,10 +1062,43 @@ def submit_registration(period_id):
         # Build per-student receipt lines
         text_rows = ''
         html_rows = ''
-        # Get effective tuition for this family for the email receipt
+        # Get effective tuition and returning family status
         email_conn2 = get_db_connection()
         email_eff_tuition, email_tuition_type = _effective_tuition(period, current_user.id, email_conn2)
+        is_returning = _is_returning_family(current_user.id, period_id, email_conn2)
         email_conn2.close()
+
+        payment_deadline = period.get('deadline', '')
+        if isinstance(payment_deadline, date):
+            payment_deadline_str = payment_deadline.strftime('%B %d, %Y')
+        elif payment_deadline:
+            try:
+                from datetime import datetime as dt2
+                payment_deadline_str = dt2.strptime(str(payment_deadline), '%Y-%m-%d').strftime('%B %d, %Y')
+            except Exception:
+                payment_deadline_str = str(payment_deadline)
+        else:
+            payment_deadline_str = ''
+
+        late_fee_warning_text = ''
+        late_fee_warning_html = ''
+        if is_returning and payment_deadline_str:
+            per_minor = float(period.get('late_fee') or 0)
+            late_fee_warning_text = (
+                f"\n⚠ IMPORTANT — PAYMENT DEADLINE: {payment_deadline_str}\n"
+                f"As a returning family, a late payment fee of ${per_minor:.2f} per minor student\n"
+                f"will be applied if payment is not received by {payment_deadline_str}.\n"
+                f"If paying by cheque, the postmark date will be used to determine timeliness.\n"
+            )
+            late_fee_warning_html = (
+                f"<div style='background:#fff3cd;border:1px solid #ffc107;padding:12px;"
+                f"border-radius:6px;margin:16px 0'>"
+                f"<strong>⚠ Payment Deadline: {payment_deadline_str}</strong><br>"
+                f"As a returning family, a late payment fee of <strong>${per_minor:.2f} per minor student</strong> "
+                f"will be applied if payment is not received by <strong>{payment_deadline_str}</strong>.<br>"
+                f"If paying by cheque, the <strong>postmark date</strong> will be used to determine timeliness."
+                f"</div>"
+            )
 
         for r in reg_rows:
             name     = f"{r['last_name']}, {r['first_name']}"
@@ -1125,6 +1212,7 @@ def submit_registration(period_id):
                 f"  {'─'*30}\n"
                 f"  TOTAL DUE:                 ${total_due:.2f}\n\n"
                 f"{pay_text}\n"
+                f"{late_fee_warning_text}"
                 f"{'='*50}\n\n"
                 f"STATUS: PENDING\n"
                 f"Your registration will not be finalized until payment is received.\n"
@@ -1148,6 +1236,7 @@ def submit_registration(period_id):
                 f"<td style='text-align:right'><strong>${total_due:.2f}</strong></td></tr>"
                 f"</table><br>"
                 f"{pay_html}"
+                f"{late_fee_warning_html}"
                 f"<div style='background:#fff3cd;border:1px solid #ffc107;padding:12px;"
                 f"border-radius:6px;margin:16px 0'>"
                 f"<strong>⚠ Status: PENDING PAYMENT</strong><br>"
@@ -1244,12 +1333,22 @@ def fee_summary(period_id):
                      'fee_note':    fee_note,
                      'is_adult':    adult})
 
-    # Multi-kid discount and late fee
+    # Multi-kid discount
     discount_per = float(period.get('discount') or 0) if period else 0
     extra_kids   = max(0, minor_count - 2)
     multi_disc   = extra_kids * discount_per
-    late_fee     = float(period.get('late_fee') or 0) if (period and _is_late(period)) else 0
-    grand_total  = student_subtotal + reg_fee + pa_fee + late_fee - multi_disc
+
+    # Late fee: per minor, returning families, unpaid past deadline
+    late_fee_waived   = bool((fpr or {}).get('late_fee_waived', 0))
+    total_paid_so_far = float((fpr or {}).get('total_paid') or 0)
+    conn3 = get_db_connection()
+    charge_late, per_minor_late = _should_charge_late_fee(
+        period, current_user.id, period_id,
+        total_paid_so_far, late_fee_waived, conn3
+    )
+    conn3.close()
+    late_fee    = minor_count * per_minor_late if charge_late else 0.0
+    grand_total = student_subtotal + reg_fee + pa_fee + late_fee - multi_disc
 
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,
@@ -1258,6 +1357,8 @@ def fee_summary(period_id):
                            reg_fee=reg_fee,
                            pa_fee=pa_fee,
                            late_fee=late_fee,
+                           late_fee_per_minor=per_minor_late,
+                           minor_count=minor_count,
                            multi_disc=multi_disc,
                            extra_kids=extra_kids,
                            discount_per=discount_per,

@@ -84,6 +84,14 @@
       <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
       <td class="text-end">${{ "%.2f"|format(pa_fee) }}</td>
     </tr>
+    {% if late_fee %}
+    <tr class="text-danger">
+      <td>Late payment fee
+        <span class="text-muted small">({{ minor_count }} minor{{ 's' if minor_count > 1 }} × ${{ "%.2f"|format(late_fee_per_minor) }})</span>
+      </td>
+      <td class="text-end">${{ "%.2f"|format(late_fee) }}</td>
+    </tr>
+    {% endif %}
     {% if multi_disc and multi_disc > 0 %}
     <tr class="text-success">
       <td>Multi-child discount
