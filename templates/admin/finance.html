@@ -7,6 +7,8 @@
   <div class="d-flex gap-2">
     <a href="{{ url_for('admin.export_families', pid=pid, status=status_filter) }}"
        class="btn btn-sm btn-outline-secondary">↓ CSV</a>
+    <a href="{{ url_for('admin.export_finance', pid=pid, status=status_filter) }}"
+       class="btn btn-sm btn-outline-success">↓ Finance Detail CSV</a>
   </div>
 </div>
 
@@ -132,8 +134,78 @@
                   data-pid="{{ selected_period.id if selected_period else '' }}">
             Update
           </button>
+          <button class="btn btn-sm btn-outline-info ms-1"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#detail-{{ r.fpr_id }}"
+                  aria-expanded="false">
+            Detail
+          </button>
         </td>
       </tr>
+      <tr class="collapse" id="detail-{{ r.fpr_id }}">
+        <td colspan="8" class="p-0">
+          <div class="p-3 bg-light border-bottom">
+            {% if r.student_details %}
+            <table class="table table-sm table-bordered mb-2 small">
+              <thead class="table-secondary">
+                <tr>
+                  <th>Student</th>
+                  <th>Type</th>
+                  <th>Language</th>
+                  <th>Culture 1</th>
+                  <th>Culture 1 Fee</th>
+                  <th>Culture 2</th>
+                  <th>Culture 2 Fee</th>
+                  <th>Tuition</th>
+                  <th class="text-end">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in r.student_details %}
+                <tr>
+                  <td>{{ s.last_name }}, {{ s.first_name }}</td>
+                  <td>{{ 'Adult' if s.is_adult else 'Minor' }}{% if s.is_adult %} ({{ 'MFCS' if s.mfcs_affiliation == 'Y' else 'General' }}){% endif %}</td>
+                  <td>{{ s.lang_class or '—' }}</td>
+                  <td>{{ s.cult_class or '—' }}</td>
+                  <td>{{ '$%.2f'|format(s.cf1) if s.cf1 else '—' }}</td>
+                  <td>{{ s.cult_class2 or '—' }}</td>
+                  <td>{{ '$%.2f'|format(s.cf2) if s.cf2 else '—' }}</td>
+                  <td>{{ '$%.2f'|format(s.tuition) if not s.is_adult else 'N/A' }}</td>
+                  <td class="text-end fw-500">${{ '%.2f'|format(s.student_fee) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot class="table-light">
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">Student subtotal</td>
+                  <td class="text-end fw-500">${{ '%.2f'|format(r.student_subtotal) }}</td>
+                </tr>
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">Registration fee</td>
+                  <td class="text-end">${{ '%.2f'|format(r.reg_fee) }}</td>
+                </tr>
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">PA Assignment Duty deposit</td>
+                  <td class="text-end">${{ '%.2f'|format(r.pa_fee) }}</td>
+                </tr>
+                {% if r.multi_disc > 0 %}
+                <tr class="text-success">
+                  <td colspan="8" class="text-end small">Multi-child discount ({{ r.extra_kids }} × ${{ '%.2f'|format(r.discount_per) }})</td>
+                  <td class="text-end">-${{ '%.2f'|format(r.multi_disc) }}</td>
+                </tr>
+                {% endif %}
+                <tr class="fw-bold">
+                  <td colspan="8" class="text-end">Total Due</td>
+                  <td class="text-end">${{ '%.2f'|format(r.total_due or 0) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+            {% else %}
+            <div class="text-muted small">No class selections found for this family.</div>
+            {% endif %}
+          </div>
+        </td>
       {% else %}
       <tr><td colspan="8" class="text-muted text-center py-4">No registrations found.</td></tr>
       {% endfor %}

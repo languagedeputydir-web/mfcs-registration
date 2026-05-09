@@ -963,9 +963,10 @@ def submit_registration(period_id):
         email_cur  = email_conn.cursor(dictionary=True)
         email_cur.execute("""
             SELECT sr.*, s.first_name, s.last_name, s.birthday,
+                   s.is_adult, s.mfcs_affiliation,
                    lc.name AS lang_class,
-                   cc.name  AS cult_class,  cc.fee  AS cult_fee,
-                   cc2.name AS cult_class2, cc2.fee AS cult_fee2
+                   cc.name  AS cult_class,  cc.fee  AS cult_fee,  cc.discount  AS cult_disc,
+                   cc2.name AS cult_class2, cc2.fee AS cult_fee2, cc2.discount AS cult_disc2
             FROM student_record sr
             JOIN student s ON s.id = sr.sid
             LEFT JOIN class_group_record lc  ON lc.id  = sr.lcgrid
@@ -989,18 +990,22 @@ def submit_registration(period_id):
             is_adult = _is_adult(r)
             mfcs     = r.get('mfcs_affiliation') == 'Y'
             tuit     = 0.0 if is_adult else email_eff_tuition
-            cf1      = float(r['cult_fee']  or 0)
-            cf2      = float(r['cult_fee2'] or 0)
+            disc1    = float(r.get('cult_disc')  or 0) if mfcs else 0
+            disc2    = float(r.get('cult_disc2') or 0) if mfcs else 0
+            cf1      = max(0, float(r['cult_fee']  or 0) - disc1)
+            cf2      = max(0, float(r['cult_fee2'] or 0) - disc2)
             st_fee   = tuit + cf1 + cf2
             lang     = r['lang_class']  or '—'
             cult     = r['cult_class']  or '—'
             cult2    = r['cult_class2'] or '—'
 
+            disc1_note = f" [discounted from ${float(r['cult_fee'] or 0):.2f}]" if disc1 else ""
+            disc2_note = f" [discounted from ${float(r['cult_fee2'] or 0):.2f}]" if disc2 else ""
             text_rows += (
                 f"  {name}\n"
                 f"    Language:  {lang}\n"
-                f"    Culture 1: {cult}{f' (${cf1:.2f})' if cf1 else ''}\n"
-                f"    Culture 2: {cult2}{f' (${cf2:.2f})' if cf2 else ''}\n"
+                f"    Culture 1: {cult}{f' (${cf1:.2f})' if cf1 else ''}{disc1_note}\n"
+                f"    Culture 2: {cult2}{f' (${cf2:.2f})' if cf2 else ''}{disc2_note}\n"
                 f"    Tuition:   {'N/A (adult)' if is_adult else f'${tuit:.2f}'}\n"
                 f"    Subtotal:  ${st_fee:.2f}\n\n"
             )
