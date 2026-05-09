@@ -832,7 +832,9 @@ def register_classes(period_id):
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn2)
     conn2.close()
 
-    print(f'REGISTER DEBUG: is_late={_is_late(period)}, period.late_fee={period.get("late_fee")}, type={type(period.get("late_fee"))}', flush=True)
+    is_late_flag = _is_late(period)
+    late_fee_amount = float(period.get('late_fee') or 0) if is_late_flag else 0.0
+    print(f'REGISTER DEBUG: is_late={is_late_flag}, period.late_fee={period.get("late_fee")}, type={type(period.get("late_fee"))}', flush=True)
     return render_template('family/register.html',
                            period=period,
                            students=students,
@@ -845,7 +847,8 @@ def register_classes(period_id):
                            existing=existing,
                            eff_tuition=eff_tuition,
                            tuition_type=tuition_type,
-                           is_late=_is_late(period),
+                           is_late=is_late_flag,
+                           late_fee_amount=late_fee_amount,
                            now_date=date.today().strftime('%Y-%m-%d'))
 
 

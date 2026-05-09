@@ -187,7 +187,7 @@
                   <td colspan="8" class="text-end text-muted small">PA Assignment Duty deposit</td>
                   <td class="text-end">${{ '%.2f'|format(r.pa_fee) }}</td>
                 </tr>
-                {% if r.late_fee and r.late_fee > 0 %}
+                {% if r.late_fee %}
                 <tr class="text-danger">
                   <td colspan="8" class="text-end small">Late registration fee</td>
                   <td class="text-end">${{ '%.2f'|format(r.late_fee) }}</td>
@@ -200,8 +200,12 @@
                 </tr>
                 {% endif %}
                 <tr class="fw-bold">
-                  <td colspan="8" class="text-end">Total Due</td>
-                  <td class="text-end">${{ '%.2f'|format(r.total_due or 0) }}</td>
+                  <td colspan="8" class="text-end">Total Due (calculated)</td>
+                  <td class="text-end">${{ '%.2f'|format(r.calc_total) }}</td>
+                </tr>
+                <tr class="text-muted">
+                  <td colspan="8" class="text-end small">Total Due (on record)</td>
+                  <td class="text-end small">${{ '%.2f'|format(r.total_due or 0) }}</td>
                 </tr>
               </tfoot>
             </table>

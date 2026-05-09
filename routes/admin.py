@@ -1140,6 +1140,7 @@ def finance():
         pa_fee     = float(sel.get('pa_assignment_deposit') or 0) if sel else 0
         disc_per   = float(sel.get('discount') or 0) if sel else 0
         tuition    = float(sel.get('tuition') or 0) if sel else 0
+        from routes.family import _is_late
         late_fee   = float(sel.get('late_fee') or 0) if (sel and _is_late(sel)) else 0
 
         cur.execute("""
@@ -1167,10 +1168,11 @@ def finance():
             cf2_raw = float(s.get('cult_fee2') or 0)
             d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
             d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
-            cf1 = max(0, cf1_raw - d1)
-            cf2 = max(0, cf2_raw - d2)
+            cf1 = max(0.0, cf1_raw - d1)
+            cf2 = max(0.0, cf2_raw - d2)
             tuit = 0.0 if adult else tuition
-            s['cf1'] = cf1; s['cf2'] = cf2
+            s['cf1'] = cf1
+            s['cf2'] = cf2
             s['tuition'] = tuit
             s['is_adult'] = adult
             s['student_fee'] = tuit + cf1 + cf2
@@ -1184,12 +1186,13 @@ def finance():
             multi_disc  = extra_kids * disc_per
             r['student_details']  = details
             r['student_subtotal'] = sum(s['student_fee'] for s in details)
-            r['reg_fee']     = reg_fee
-            r['pa_fee']      = pa_fee
-            r['late_fee']    = late_fee
-            r['multi_disc']  = multi_disc
-            r['extra_kids']  = extra_kids
-            r['discount_per']= disc_per
+            r['reg_fee']          = reg_fee
+            r['pa_fee']           = pa_fee
+            r['late_fee']         = late_fee
+            r['multi_disc']       = multi_disc
+            r['extra_kids']       = extra_kids
+            r['discount_per']     = disc_per
+            r['calc_total']       = r['student_subtotal'] + reg_fee + pa_fee + late_fee - multi_disc
 
     conn.close()
     return render_template('admin/finance.html',

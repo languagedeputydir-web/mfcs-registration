@@ -33,7 +33,7 @@
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
     {% if is_late %}
-    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format((period.late_fee or 0)|float) }}</strong>
+    <li class="text-danger"><strong>Late registration fee: ${{ "%.2f"|format(late_fee_amount) }}</strong>
       — the registration deadline has passed</li>
     {% endif %}
   </ul>
@@ -206,7 +206,7 @@
         {% if is_late %}
         <tr class="text-danger">
           <td colspan="3" class="small">Late registration fee</td>
-          <td class="text-end small">${{ "%.2f"|format((period.late_fee or 0)|float) }}</td>
+          <td class="text-end small">${{ "%.2f"|format(late_fee_amount) }}</td>
         </tr>
         {% endif %}
         <tr id="discount-row" style="display:none">
@@ -261,7 +261,7 @@ const TUITION  = {{ eff_tuition|default(period.tuition) or 0 }};
 const REG_FEE  = {{ period.registration_fee or 0 }};
 const PA_DEP   = {{ period.pa_assignment_deposit or 0 }};
 const DISCOUNT = {{ period.discount|float if period.discount else 0 }};
-const LATE_FEE = {{ period.late_fee|float if (period.late_fee and is_late) else 0 }};
+const LATE_FEE = {{ late_fee_amount }};
 const STUDENTS = [{% for s in students %}
   {sid:{{s.id}},name:"{{s.last_name}}, {{s.first_name}}",isAdult:{{s._is_adult|lower}},mfcs:{{('true' if s.mfcs_affiliation == 'Y' else 'false')}}}{% if not loop.last %},{% endif %}
 {% endfor %}];
