@@ -1825,9 +1825,10 @@ def students():
             where.append("(s.media_consent IS NULL OR s.media_consent != 0)")
         elif media_filter == 'optout':
             where.append("s.media_consent = 0")
-        if note_filter:
-            where.append("s.special_note LIKE %s")
-            params.append(f"%{note_filter}%")
+        if note_filter == 'has_note':
+            where.append("(s.special_note IS NOT NULL AND s.special_note != '')")
+        elif note_filter == 'no_note':
+            where.append("(s.special_note IS NULL OR s.special_note = '')")
         cur.execute(f"""SELECT s.*,f.last_name_0 AS family_last,f.first_name_0 AS family_first,
             f.primary_email AS family_email,f.id AS family_id,
             lc.name AS lang_class,cc.name AS cult_class,cc2.name AS cult_class2

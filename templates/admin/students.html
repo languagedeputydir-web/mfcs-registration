@@ -54,8 +54,11 @@
     </div>
     <div>
       <label class="form-label small fw-500 mb-1">Special Note</label>
-      <input type="text" name="note" class="form-control form-control-sm" style="width:160px"
-             placeholder="Search notes…" value="{{ note_filter or '' }}">
+      <select name="note" class="form-select form-select-sm" style="width:160px">
+        <option value="">All</option>
+        <option value="has_note" {% if note_filter=='has_note' %}selected{% endif %}>Has note</option>
+        <option value="no_note"  {% if note_filter=='no_note'  %}selected{% endif %}>No note</option>
+      </select>
     </div>
     <button type="submit" class="btn btn-sm btn-admin">Filter</button>
     {% if lang_filter or cult_filter or name_filter or media_filter or note_filter %}
