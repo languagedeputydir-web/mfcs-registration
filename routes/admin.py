@@ -1801,8 +1801,11 @@ def students():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur); plist = _periods_list(cur)
     pid = request.args.get('pid', period['id'] if period else None)
-    lang_filter = request.args.get('lang','')
-    cult_filter = request.args.get('cult','')
+    lang_filter  = request.args.get('lang','')
+    cult_filter  = request.args.get('cult','')
+    name_filter  = request.args.get('name','').strip()
+    media_filter = request.args.get('media','')
+    note_filter  = request.args.get('note','').strip()
     lang_classes = []; cult_classes = []; rows = []
     sel = None
     if pid:
@@ -1814,6 +1817,17 @@ def students():
         where = ["sr.pid=%s"]; params = [pid]
         if lang_filter: where.append("sr.lcgrid=%s"); params.append(int(lang_filter))
         if cult_filter: where.append("(sr.ccgrid=%s OR sr.ccgrid2=%s)"); params.extend([int(cult_filter),int(cult_filter)])
+        if name_filter:
+            like = f"%{name_filter}%"
+            where.append("(s.last_name LIKE %s OR s.first_name LIKE %s OR s.chinese_name LIKE %s)")
+            params.extend([like, like, like])
+        if media_filter == 'optin':
+            where.append("(s.media_consent IS NULL OR s.media_consent != 0)")
+        elif media_filter == 'optout':
+            where.append("s.media_consent = 0")
+        if note_filter:
+            where.append("s.special_note LIKE %s")
+            params.append(f"%{note_filter}%")
         cur.execute(f"""SELECT s.*,f.last_name_0 AS family_last,f.first_name_0 AS family_first,
             f.primary_email AS family_email,f.id AS family_id,
             lc.name AS lang_class,cc.name AS cult_class,cc2.name AS cult_class2
@@ -1824,11 +1838,15 @@ def students():
             LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
             WHERE {' AND '.join(where)} ORDER BY s.last_name,s.first_name""", params)
         rows = cur.fetchall()
+    from datetime import date as _date
     conn.close()
     return render_template('admin/students.html',
         students=rows, period=sel, periods_list=plist,
         lang_classes=lang_classes, cult_classes=cult_classes,
-        lang_filter=lang_filter, cult_filter=cult_filter, pid=pid)
+        lang_filter=lang_filter, cult_filter=cult_filter,
+        name_filter=name_filter, media_filter=media_filter,
+        note_filter=note_filter, pid=pid,
+        today=_date.today())
 
 # ══ CSV EXPORTS ════════════════════════════════════════════════════════════════
 
