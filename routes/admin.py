@@ -1219,7 +1219,7 @@ def finance():
             from routes.family import _should_charge_late_fee as _sclf
             _conn_tmp = get_db_connection()
             charge_late, per_minor = _sclf(
-                sel, r['family_id'], pid,
+                sel, r['family_id'], int(pid),
                 total_paid_fam, fam_late_fee_waived, _conn_tmp
             )
             _conn_tmp.close()
@@ -1237,7 +1237,7 @@ def finance():
             # late_fee_eligible: returning + past deadline + has minors (ignores payment & waiver)
             if minor_count > 0 and _is_late(sel):
                 _conn_tmp2 = get_db_connection()
-                is_ret = _is_returning_family(r['family_id'], pid, _conn_tmp2)
+                is_ret = _is_returning_family(r['family_id'], int(pid), _conn_tmp2)
                 _conn_tmp2.close()
                 r['late_fee_eligible'] = is_ret
             else:
