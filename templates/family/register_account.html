@@ -14,7 +14,7 @@
     </div>
 
     <div class="card p-4">
-      <form method="post" action="{{ url_for('family.register_account') }}">
+      <form method="post" action="{{ url_for('family.register_account') }}" autocomplete="off">
 
         <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">
           Primary Guardian
@@ -63,7 +63,8 @@
           <label class="form-label small fw-500">Email Address * <span class="text-muted fw-400">(used to log in)</span></label>
           <input type="email" name="primary_email"
                  class="form-control {{ 'is-invalid' if field_errors and field_errors.get('primary_email') }}"
-                 value="{{ form.primary_email if form else '' }}" required>
+                 value="{{ form.primary_email if form else '' }}"
+                 autocomplete="off" required>
           {% if field_errors and field_errors.get('primary_email') %}
           <div class="invalid-feedback">{{ field_errors.primary_email }}</div>
           {% endif %}
@@ -86,6 +87,7 @@
             <label class="form-label small fw-500">Street Address <span class="text-danger">*</span></label>
             <input type="text" name="street_address" class="form-control {{ 'is-invalid' if field_errors and field_errors.get('street_address') }}"
                    value="{{ form.street_address if form else '' }}"
+                   autocomplete="off"
                    placeholder="123 Main St" required>
             {% if field_errors and field_errors.get('street_address') %}
             <div class="invalid-feedback">{{ field_errors.street_address }}</div>
@@ -121,6 +123,7 @@
           <div class="input-group {{ 'has-validation' if field_errors and field_errors.get('password') }}">
             <input type="password" name="password" id="pw1"
                    class="form-control {{ 'is-invalid' if field_errors and field_errors.get('password') }}"
+                   autocomplete="new-password"
                    required minlength="8">
             <button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw1')" tabindex="-1">👁</button>
             {% if field_errors and field_errors.get('password') %}
@@ -133,6 +136,7 @@
           <div class="input-group {{ 'has-validation' if field_errors and field_errors.get('confirm_password') }}">
             <input type="password" name="confirm_password" id="pw2"
                    class="form-control {{ 'is-invalid' if field_errors and field_errors.get('confirm_password') }}"
+                   autocomplete="new-password"
                    required minlength="8">
             <button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw2')" tabindex="-1">👁</button>
             {% if field_errors and field_errors.get('confirm_password') %}
