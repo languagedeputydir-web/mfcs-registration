@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="col-6">
         <label class="form-label small fw-500">Email</label>
         <input type="email" name="email" class="form-control"
-               value="{{ student.email if student and student.email not in ('?','') else '' }}"
+               value="{{ student.email if student and student.email and student.email not in ('?','') and not student.email.endswith('@placeholder.invalid') else '' }}"
                title="Enter a valid email address">
       </div>
     </div>
@@ -140,16 +140,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
     {# ── Media Consent ── #}
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Photography &amp; Media Consent</h6>
-    <p class="small text-muted mb-3">
-      Please select ONE of the following options regarding the use of photographs, video,
-      and audio recordings:
-    </p>
 
+    {% if student and student.media_consent == 0 %}
+    {# Student has been opted out by admin #}
+    <div class="card border-danger mb-3 p-3">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge bg-danger">OPT-OUT</span>
+        <span class="fw-600">This student has opted out of media sharing.</span>
+      </div>
+      <div class="small text-muted">
+        This student's image and voice will not be posted to official websites, Facebook,
+        or any other school-managed social media platforms or publications.<br><br>
+        To reverse this decision, please email
+        <a href="mailto:principal@mfcsnj.org">principal@mfcsnj.org</a>.
+      </div>
+    </div>
+    {# Hidden field to preserve opt-out status #}
+    <input type="hidden" name="media_consent" value="0">
+
+    {% else %}
+    {# Default: opted in — show consent text and opt-in radio #}
     <div class="card border mb-3 p-3">
       <div class="form-check mb-2">
         <input class="form-check-input" type="radio" name="media_consent" id="media_optin"
-               value="1" {% if student and student.media_consent == 1 %}checked{% endif %}
-               required>
+               value="1" checked required>
         <label class="form-check-label fw-600" for="media_optin">
           OPT-IN (I Consent)
         </label>
@@ -167,22 +181,12 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <div class="card border mb-3 p-3">
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="media_consent" id="media_optout"
-               value="0" {% if student and student.media_consent == 0 %}checked{% endif %}>
-        <label class="form-check-label fw-600" for="media_optout">
-          OPT-OUT (I Do Not Consent)
-        </label>
-      </div>
-      <div class="small text-muted mt-2" style="padding-left:1.5rem">
-        I do not give my permission to MONMOUTH FIDELITY CHINESE SCHOOL, its entities, or
-        third parties to make, reproduce, broadcast, or publish any video, film, footage,
-        audio recordings, or photographs of me or my child. I understand that by checking
-        this box, my/my child's image and voice will not be posted by the school to official
-        websites, Facebook, or any other school-managed social media platforms or publications.
-      </div>
+    <div class="alert alert-info small mb-3">
+      <strong>To opt out</strong> of media sharing for this student, please send an email to
+      <a href="mailto:principal@mfcsnj.org"><strong>principal@mfcsnj.org</strong></a>
+      with your student's name and your request. The school will update this status upon receipt.
     </div>
+    {% endif %}
 
     <div class="alert alert-warning small mb-4" role="alert">
       <strong>IMPORTANT NOTICE REGARDING OPEN EVENTS</strong> (Applies to all students, regardless of selection above):<br>

@@ -1766,17 +1766,19 @@ def edit_student(student_id):
     # ── Full edit — admin / finance ────────────────────────────────────────────
     if request.method == 'POST':
         f = request.form
+        media_consent = 1 if f.get('media_consent') == '1' else 0
         cur.execute("""UPDATE student SET
                 first_name=%s, last_name=%s, chinese_name=%s,
                 gender=%s, birthday=%s, phone=%s, email=%s,
                 ec_first_name=%s, ec_last_name=%s, ec_phone=%s,
-                special_note=%s WHERE id=%s""",
+                special_note=%s, media_consent=%s WHERE id=%s""",
                 (f.get('first_name',''), f.get('last_name',''),
                  f.get('chinese_name','?'), f.get('gender','?'),
                  f.get('birthday','').strip() or '2999-01-01',
                  f.get('phone','?'), f.get('email','?'),
                  f.get('ec_first_name','?'), f.get('ec_last_name','?'),
-                 f.get('ec_phone','?'), f.get('special_note',''), student_id))
+                 f.get('ec_phone','?'), f.get('special_note',''),
+                 media_consent, student_id))
         conn.commit(); conn.close()
         flash('Student updated.', 'success')
         pid_arg  = request.form.get('_pid', '')

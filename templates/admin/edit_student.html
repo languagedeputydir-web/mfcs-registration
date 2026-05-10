@@ -234,6 +234,28 @@
                 placeholder="Medical conditions, allergies, photo/social media permission, etc.">{{ student.special_note or '' }}</textarea>
       <div class="form-text">Visible to all admin users.</div>
     </div>
+
+    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Media Consent</h6>
+    <div class="mb-4">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" name="media_consent"
+               id="media_consent_toggle" value="1"
+               {% if student.media_consent != 0 %}checked{% endif %}>
+        <label class="form-check-label" for="media_consent_toggle">
+          {% if student.media_consent == 0 %}
+          <span class="badge bg-danger">OPT-OUT</span> Student has opted out of media sharing
+          {% else %}
+          <span class="badge bg-success">OPT-IN</span> Student has consented to media sharing
+          {% endif %}
+        </label>
+      </div>
+      <div class="form-text">
+        Toggle to opt this student in or out of photography &amp; media sharing.
+        Families can only opt out by emailing
+        <a href="mailto:principal@mfcsnj.org">principal@mfcsnj.org</a> —
+        this toggle should only be changed upon receipt of that request.
+      </div>
+    </div>
     <input type="hidden" name="_pid"  value="{{ pid or '' }}">
     <input type="hidden" name="_lang" value="{{ lang or '' }}">
     <input type="hidden" name="_cult" value="{{ cult or '' }}">
