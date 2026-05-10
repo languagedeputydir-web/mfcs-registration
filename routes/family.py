@@ -866,13 +866,22 @@ def register_classes(period_id):
 
     is_late_flag = _is_late(period)
     # Get current payment status for late fee check
-    cur.execute(
-        "SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
-        (current_user.id, period_id)
-    )
-    fpr_row = cur.fetchone()
-    total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
-    late_fee_waived   = bool((fpr_row or {}).get('late_fee_waived', 0))
+    try:
+        cur.execute(
+            "SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
+            (current_user.id, period_id)
+        )
+        fpr_row = cur.fetchone()
+        total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
+        late_fee_waived   = bool((fpr_row or {}).get('late_fee_waived', 0))
+    except Exception:
+        cur.execute(
+            "SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s",
+            (current_user.id, period_id)
+        )
+        fpr_row = cur.fetchone()
+        total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
+        late_fee_waived   = False
 
     conn2 = get_db_connection()
     charge_late, per_minor_late = _should_charge_late_fee(

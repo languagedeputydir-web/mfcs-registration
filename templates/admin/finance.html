@@ -210,7 +210,8 @@
                 </tr>
                 {% if r.late_fee %}
                 <tr class="text-danger">
-                  <td colspan="8" class="text-end small">Late registration fee</td>
+                  <td colspan="8" class="text-end small">Late payment fee
+                    ({{ r.minor_count }} minor{{ 's' if r.minor_count > 1 }} × ${{ '%.2f'|format(r.per_minor_late) }})</td>
                   <td class="text-end">${{ '%.2f'|format(r.late_fee) }}</td>
                 </tr>
                 {% endif %}

@@ -116,11 +116,17 @@ def _recalc_family_record(cur, fid, pid):
         )
     minor_count = sum(1 for r in rows if not _is_adult(r))
 
-    # Get current payment and waiver status
-    cur.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
-    fpr_row = cur.fetchone() or {}
-    total_paid_so_far = float(fpr_row.get('total_paid') or 0)
-    late_fee_waived   = bool(fpr_row.get('late_fee_waived', 0))
+    # Get current payment and waiver status (late_fee_waived may not exist yet)
+    try:
+        cur.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        fpr_row = cur.fetchone() or {}
+        total_paid_so_far = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived   = bool(fpr_row.get('late_fee_waived', 0))
+    except Exception:
+        cur.execute("SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        fpr_row = cur.fetchone() or {}
+        total_paid_so_far = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived   = False
 
     charge_late, per_minor_late = _should_charge_late_fee(
         period, fid, pid, total_paid_so_far, late_fee_waived, None
@@ -1196,15 +1202,31 @@ def finance():
             minor_count = sum(1 for s in details if not s['is_adult'])
             extra_kids  = max(0, minor_count - 2)
             multi_disc  = extra_kids * disc_per
+            fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
+            total_paid_fam = float(r.get('total_paid') or 0)
+
+            # Check late fee per family with a fresh connection
+            from routes.family import _should_charge_late_fee as _sclf
+            _conn_tmp = get_db_connection()
+            charge_late, per_minor = _sclf(
+                sel, r['family_id'], pid,
+                total_paid_fam, fam_late_fee_waived, _conn_tmp
+            )
+            _conn_tmp.close()
+            # Late fee only applies if there are minors and family is returning
+            fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
+
             r['student_details']  = details
             r['student_subtotal'] = sum(s['student_fee'] for s in details)
             r['reg_fee']          = reg_fee
             r['pa_fee']           = pa_fee
-            r['late_fee']         = late_fee
+            r['late_fee']         = fam_late_fee
             r['multi_disc']       = multi_disc
             r['extra_kids']       = extra_kids
             r['discount_per']     = disc_per
-            r['calc_total']       = r['student_subtotal'] + reg_fee + pa_fee + late_fee - multi_disc
+            r['minor_count']      = minor_count
+            r['per_minor_late']   = per_minor if charge_late else 0.0
+            r['calc_total']       = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
 
     conn.close()
     return render_template('admin/finance.html',
@@ -1383,9 +1405,13 @@ def waive_late_fee():
     fpr_id = request.form.get('fpr_id')
     pid    = request.form.get('pid', '')
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("UPDATE family_record SET late_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
-    conn.commit(); conn.close()
-    flash('Late fee waived for this family.', 'success')
+    try:
+        cur.execute("UPDATE family_record SET late_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
+        conn.commit()
+        flash('Late fee waived for this family.', 'success')
+    except Exception:
+        flash('Cannot waive late fee — database column not yet created. Please run the migration SQL.', 'error')
+    conn.close()
     return redirect(url_for('admin.finance', pid=pid or None))
 
 
@@ -1395,9 +1421,13 @@ def unwaive_late_fee():
     fpr_id = request.form.get('fpr_id')
     pid    = request.form.get('pid', '')
     conn = get_db_connection(); cur = conn.cursor()
-    cur.execute("UPDATE family_record SET late_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
-    conn.commit(); conn.close()
-    flash('Late fee reinstated for this family.', 'success')
+    try:
+        cur.execute("UPDATE family_record SET late_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
+        conn.commit()
+        flash('Late fee reinstated for this family.', 'success')
+    except Exception:
+        flash('Cannot update late fee waiver — database column not yet created.', 'error')
+    conn.close()
     return redirect(url_for('admin.finance', pid=pid or None))
 
 
