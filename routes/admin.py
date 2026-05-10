@@ -1224,9 +1224,16 @@ def finance():
             r['multi_disc']       = multi_disc
             r['extra_kids']       = extra_kids
             r['discount_per']     = disc_per
-            r['minor_count']      = minor_count
-            r['per_minor_late']   = per_minor if charge_late else 0.0
-            r['calc_total']       = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
+            # Check if family is eligible for late fee (ignoring payment and waiver)
+            _conn_tmp2 = get_db_connection()
+            charge_no_waiver, per_minor_base = _sclf(
+                sel, r['family_id'], pid, 0, False, _conn_tmp2
+            )
+            _conn_tmp2.close()
+            r['late_fee_eligible'] = charge_no_waiver and minor_count > 0
+            r['minor_count']       = minor_count
+            r['per_minor_late']    = per_minor if charge_late else per_minor_base
+            r['calc_total']        = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
 
     conn.close()
     return render_template('admin/finance.html',
