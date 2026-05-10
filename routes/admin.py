@@ -1194,7 +1194,7 @@ def finance():
             s['is_adult'] = adult
             students_by_fid[s['fid']].append(s)
 
-        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition
+        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition, _is_returning_family, _is_late
         for r in regs:
             r['balance'] = float(r['total_due'] or 0) - float(r['total_paid'] or 0) - float(r['adjustment'] or 0)
             details = students_by_fid.get(r['family_id'], [])
@@ -1234,16 +1234,17 @@ def finance():
             r['multi_disc']       = multi_disc
             r['extra_kids']       = extra_kids
             r['discount_per']     = disc_per
-            # Check if family is eligible for late fee (ignoring payment and waiver)
-            _conn_tmp2 = get_db_connection()
-            charge_no_waiver, per_minor_base = _sclf(
-                sel, r['family_id'], pid, 0, False, _conn_tmp2
-            )
-            _conn_tmp2.close()
-            r['late_fee_eligible'] = charge_no_waiver and minor_count > 0
-            r['minor_count']       = minor_count
-            r['per_minor_late']    = per_minor if charge_late else per_minor_base
-            r['calc_total']        = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
+            # late_fee_eligible: returning + past deadline + has minors (ignores payment & waiver)
+            if minor_count > 0 and _is_late(sel):
+                _conn_tmp2 = get_db_connection()
+                is_ret = _is_returning_family(r['family_id'], pid, _conn_tmp2)
+                _conn_tmp2.close()
+                r['late_fee_eligible'] = is_ret
+            else:
+                r['late_fee_eligible'] = False
+            r['minor_count']    = minor_count
+            r['per_minor_late'] = per_minor if charge_late else float(sel.get('late_fee') or 0)
+            r['calc_total']     = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
 
     conn.close()
     return render_template('admin/finance.html',
