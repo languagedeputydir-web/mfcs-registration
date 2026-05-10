@@ -1359,6 +1359,20 @@ def fee_summary(period_id):
     late_fee    = minor_count * per_minor_late if charge_late else 0.0
     grand_total = student_subtotal + reg_fee + pa_fee + late_fee - multi_disc
 
+    # Auto-update total_due if recalculated total differs from stored (e.g. late fee kicked in)
+    if fpr and abs(grand_total - float(fpr.get('total_due') or 0)) > 0.01:
+        conn4 = get_db_connection()
+        cur4  = conn4.cursor()
+        cur4.execute(
+            "UPDATE family_record SET total_due=%s, last_update=NOW() WHERE id=%s",
+            (grand_total, fpr['id'])
+        )
+        conn4.commit()
+        conn4.close()
+        # Update fpr in memory so Payment Status section shows correct value
+        fpr = dict(fpr)
+        fpr['total_due'] = grand_total
+
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,
                            rows=rows,
