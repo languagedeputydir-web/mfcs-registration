@@ -139,6 +139,7 @@
                   aria-expanded="false">
             Detail
           </button>
+          {% if r.late_fee %}
           {% if r.late_fee_waived %}
           <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
@@ -157,6 +158,7 @@
               Waive Late Fee
             </button>
           </form>
+          {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -225,6 +227,15 @@
                 <tr class="text-muted">
                   <td colspan="8" class="text-end small">Total Due (on record)</td>
                   <td class="text-end small">${{ '%.2f'|format(r.total_due or 0) }}</td>
+                </tr>
+                <tr class="text-success">
+                  <td colspan="8" class="text-end small">Payment received</td>
+                  <td class="text-end small">${{ '%.2f'|format(r.total_paid or 0) }}</td>
+                </tr>
+                {% set balance = (r.total_due or 0)|float - (r.total_paid or 0)|float - (r.adjustment or 0)|float %}
+                <tr class="{{ 'text-danger fw-bold' if balance > 0 else 'text-success' }}">
+                  <td colspan="8" class="text-end small">Balance owing</td>
+                  <td class="text-end small">${{ '%.2f'|format(balance) }}</td>
                 </tr>
               </tfoot>
             </table>
