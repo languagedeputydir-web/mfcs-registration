@@ -311,6 +311,29 @@ function calcFees(){
   document.getElementById('fee-foot').style.display = hasAny ? '' : 'none';
 }
 document.querySelectorAll('select').forEach(function(s){ s.addEventListener('change', calcFees); });
+
+// Enable/disable submit based on whether any student has a selection
+function updateSubmitButton() {
+  const submitBtn = document.querySelector('button[type="submit"]');
+  if (!submitBtn) return;
+  let anySelected = false;
+  STUDENTS.forEach(function(s) {
+    const langSel  = document.querySelector('select[name="lang_'+s.sid+'"]');
+    const cultSel  = document.querySelector('select[name="cult_'+s.sid+'"]');
+    const cult2Sel = document.querySelector('select[name="cult2_'+s.sid+'"]');
+    const langVal  = langSel  && langSel.value  && langSel.value  !== '0' ? langSel.value  : '';
+    const cultVal  = cultSel  && cultSel.value  && cultSel.value  !== '0' ? cultSel.value  : '';
+    const cult2Val = cult2Sel && cult2Sel.value && cult2Sel.value !== '0' ? cult2Sel.value : '';
+    if (langVal || cultVal || cult2Val) anySelected = true;
+  });
+  submitBtn.disabled = !anySelected;
+  submitBtn.title = anySelected ? '' : 'Please select at least one class for a student before submitting.';
+}
+
+document.querySelectorAll('select').forEach(function(s) {
+  s.addEventListener('change', function() { calcFees(); updateSubmitButton(); });
+});
+updateSubmitButton();
 calcFees();
 </script>
 {% endblock %}

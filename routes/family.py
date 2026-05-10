@@ -938,6 +938,18 @@ def submit_registration(period_id):
     student_subtotal = 0.0
     minor_count = 0  # track minors for multi-kid discount
 
+    # Validate that at least one student has selected something
+    any_selection = any(
+        request.form.get(f'lang_{sid}') or
+        request.form.get(f'cult_{sid}') or
+        request.form.get(f'cult2_{sid}')
+        for sid in students
+    )
+    if not any_selection:
+        conn.close()
+        flash('Please select at least one class for a student before submitting.', 'error')
+        return redirect(url_for('family.register_classes', period_id=period_id))
+
     for sid, student in students.items():
         # Adults have no language class
         lid  = request.form.get(f'lang_{sid}')
