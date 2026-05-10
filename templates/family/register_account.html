@@ -88,7 +88,7 @@
             <input type="text" name="street_address" class="form-control {{ 'is-invalid' if field_errors and field_errors.get('street_address') }}"
                    value="{{ form.street_address if form else '' }}"
                    autocomplete="off"
-                   placeholder="123 Main St" required>
+                   placeholder="e.g. 123 Main St" required>
             {% if field_errors and field_errors.get('street_address') %}
             <div class="invalid-feedback">{{ field_errors.street_address }}</div>
             {% endif %}
@@ -97,7 +97,7 @@
             <label class="form-label small fw-500">City <span class="text-danger">*</span></label>
             <input type="text" name="city" class="form-control"
                    value="{{ form.city if form else '' }}"
-                   placeholder="Freehold" required>
+                   placeholder="e.g. Freehold" required>
           </div>
         </div>
         <div class="row g-2 mb-4">
@@ -111,7 +111,7 @@
             <label class="form-label small fw-500">ZIP <span class="text-danger">*</span></label>
             <input type="text" name="zip" class="form-control"
                    value="{{ form.zip if form else '' }}"
-                   placeholder="07728" pattern="\d{5}(-\d{4})?" inputmode="numeric" required>
+                   placeholder="e.g. 07728" pattern="\d{5}(-\d{4})?" inputmode="numeric" required>
           </div>
         </div>
 
