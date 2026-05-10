@@ -862,26 +862,32 @@ def register_classes(period_id):
     # Calculate effective tuition for this family (grandfathered or standard)
     conn2 = get_db_connection()
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn2)
-    conn2.close()
 
     is_late_flag = _is_late(period)
-    # Get current payment status for late fee check
+    # Get current payment status for late fee check — reuse conn2
     try:
-        cur.execute(
+        cur2 = conn2.cursor(dictionary=True)
+        cur2.execute(
             "SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
             (current_user.id, period_id)
         )
-        fpr_row = cur.fetchone()
+        fpr_row = cur2.fetchone()
         total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
         late_fee_waived   = bool((fpr_row or {}).get('late_fee_waived', 0))
     except Exception:
-        cur.execute(
-            "SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s",
-            (current_user.id, period_id)
-        )
-        fpr_row = cur.fetchone()
-        total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
-        late_fee_waived   = False
+        try:
+            cur2 = conn2.cursor(dictionary=True)
+            cur2.execute(
+                "SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s",
+                (current_user.id, period_id)
+            )
+            fpr_row = cur2.fetchone()
+            total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
+        except Exception:
+            total_paid_so_far = 0.0
+        late_fee_waived = False
+
+    conn2.close()
 
     conn2 = get_db_connection()
     charge_late, per_minor_late = _should_charge_late_fee(
