@@ -139,7 +139,7 @@
                   aria-expanded="false">
             Detail
           </button>
-          {% if r.late_fee %}
+          {% if r.late_fee or r.late_fee_waived %}
           {% if r.late_fee_waived %}
           <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
