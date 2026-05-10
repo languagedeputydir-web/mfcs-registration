@@ -1188,23 +1188,33 @@ def finance():
             d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
             cf1 = max(0.0, cf1_raw - d1)
             cf2 = max(0.0, cf2_raw - d2)
-            tuit = 0.0 if adult else tuition
+            # Store raw data — tuition calculated per-family below
             s['cf1'] = cf1
             s['cf2'] = cf2
-            s['tuition'] = tuit
             s['is_adult'] = adult
-            s['student_fee'] = tuit + cf1 + cf2
             students_by_fid[s['fid']].append(s)
 
+        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition
         for r in regs:
             r['balance'] = float(r['total_due'] or 0) - float(r['total_paid'] or 0) - float(r['adjustment'] or 0)
             details = students_by_fid.get(r['family_id'], [])
+
+            # Get effective tuition for this family (grandfathered or standard)
+            _conn_tuit = get_db_connection()
+            eff_tuit, _ = _effective_tuition(sel, r['family_id'], _conn_tuit)
+            _conn_tuit.close()
+
+            # Apply per-family tuition to each student
+            for s in details:
+                tuit = 0.0 if s['is_adult'] else eff_tuit
+                s['tuition'] = tuit
+                s['student_fee'] = tuit + s['cf1'] + s['cf2']
+
             minor_count = sum(1 for s in details if not s['is_adult'])
             extra_kids  = max(0, minor_count - 2)
             multi_disc  = extra_kids * disc_per
             fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
             total_paid_fam = float(r.get('total_paid') or 0)
-
             # Check late fee per family with a fresh connection
             from routes.family import _should_charge_late_fee as _sclf
             _conn_tmp = get_db_connection()
