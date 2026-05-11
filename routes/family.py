@@ -245,13 +245,14 @@ def _should_charge_late_fee(period, family_id, current_pid, total_paid, late_fee
 def _calc_total_family_fee(student_subtotal, period, minor_count=0, late_fee=0.0):
     """
     Add once-per-family fees:
-      + registration_fee
-      + pa_assignment_deposit  (refundable)
-      + late_fee               (per minor, for returning families past payment deadline)
+      + registration_fee        (only if family has minors)
+      + pa_assignment_deposit   (only if family has minors)
+      + late_fee                (per minor, for returning families past payment deadline)
       - period.discount per minor beyond the first 2 (multi-kid discount)
+    Adult-only families are exempt from registration fee and PA deposit.
     """
-    reg_fee           = float(period.get('registration_fee') or 0)
-    pa_fee            = float(period.get('pa_assignment_deposit') or 0)
+    reg_fee           = float(period.get('registration_fee') or 0) if minor_count > 0 else 0.0
+    pa_fee            = float(period.get('pa_assignment_deposit') or 0) if minor_count > 0 else 0.0
     per_kid_discount  = float(period.get('discount') or 0)
     additional_kids   = max(0, minor_count - 2)
     multi_kid_discount = additional_kids * per_kid_discount
@@ -1247,7 +1248,7 @@ def submit_registration(period_id):
                 f"STATUS: PENDING\n"
                 f"Your registration will not be finalized until payment is received.\n"
                 f"Once confirmed, you will receive a separate payment confirmation email.\n\n"
-                f"Questions? Contact us at registration@mfcsnj.org\n\n"
+                f"Questions? Contact us at languagedeputydir@mfcsnj.org\n\n"
                 f"Monmouth Fidelity Chinese School"
             ),
             html_body=(
@@ -1278,7 +1279,7 @@ def submit_registration(period_id):
                 f"Your registration will not be finalized until payment is received by our finance team. "
                 f"Once your payment has been confirmed, you will receive a separate confirmation email.</div>"
                 f"<p>Questions? Contact us at "
-                f"<a href='mailto:registration@mfcsnj.org'>registration@mfcsnj.org</a></p>"
+                f"<a href='mailto:languagedeputydir@mfcsnj.org'>languagedeputydir@mfcsnj.org</a></p>"
                 f"<p>Monmouth Fidelity Chinese School</p>"
             )
         )

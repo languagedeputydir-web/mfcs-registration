@@ -23,10 +23,8 @@
     <li>Students <strong>18 or older</strong>: Cultural program fee(s) only — no tuition charge</li>
     <li>Language program: included in tuition — no extra charge</li>
     <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
-    <li>Registration fee (per family):
-      <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
-    <li>PA Assignment Duty deposit — refundable (per family):
-      <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+    <li id="reg-fee-info">Registration fee (per family): <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
+    <li id="pa-fee-info">PA Assignment Duty deposit — refundable (per family): <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
     {% if period.discount and period.discount|float > 0 %}
     <li>Multi-child discount: families with <strong>3 or more children under 18</strong>
       enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
@@ -195,11 +193,11 @@
         <tr><td colspan="4" class="text-muted small text-center">Select classes above to see fees</td></tr>
       </tbody>
       <tfoot id="fee-foot" style="display:none">
-        <tr class="border-top">
+        <tr class="border-top" id="reg-fee-row">
           <td colspan="3" class="text-muted small">Registration fee (per family)</td>
           <td class="text-end text-muted small">${{ "%.2f"|format(period.registration_fee or 0) }}</td>
         </tr>
-        <tr>
+        <tr id="pa-fee-row">
           <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
           <td class="text-end text-muted small">${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</td>
         </tr>
@@ -301,7 +299,20 @@ function calcFees(){
   document.getElementById('fee-rows').innerHTML = rows || '<tr><td colspan="4" class="text-muted small text-center">Select classes above to see fees</td></tr>';
   const extra = Math.max(0, minors-2);
   const disc  = extra * DISCOUNT;
-  const total = sub + REG_FEE + PA_DEP + LATE_FEE - disc;
+  const familyRegFee = minors > 0 ? REG_FEE : 0;
+  const familyPaFee  = minors > 0 ? PA_DEP  : 0;
+  const total = sub + familyRegFee + familyPaFee + LATE_FEE - disc;
+
+  // Show/hide reg fee and PA deposit rows in fee info box and fee summary table
+  const regInfo   = document.getElementById('reg-fee-info');
+  const paInfo    = document.getElementById('pa-fee-info');
+  const regRow    = document.getElementById('reg-fee-row');
+  const paRow     = document.getElementById('pa-fee-row');
+  const showFees  = minors > 0;
+  if (regInfo) regInfo.style.display = showFees ? '' : 'none';
+  if (paInfo)  paInfo.style.display  = showFees ? '' : 'none';
+  if (regRow)  regRow.style.display  = showFees ? '' : 'none';
+  if (paRow)   paRow.style.display   = showFees ? '' : 'none';
   const dr = document.getElementById('discount-row');
   if(dr){ dr.style.display = disc>0?'':'none'; }
   const da = document.getElementById('discount-amount');

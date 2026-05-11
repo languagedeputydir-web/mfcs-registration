@@ -76,6 +76,7 @@
       <td>Student fees subtotal</td>
       <td class="text-end">${{ "%.2f"|format(student_subtotal) }}</td>
     </tr>
+    {% if minor_count > 0 %}
     <tr>
       <td>Registration fee <span class="text-muted small">(non-refundable)</span></td>
       <td class="text-end">${{ "%.2f"|format(reg_fee) }}</td>
@@ -84,6 +85,7 @@
       <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
       <td class="text-end">${{ "%.2f"|format(pa_fee) }}</td>
     </tr>
+    {% endif %}
     {% if late_fee %}
     <tr class="text-danger">
       <td>Late payment fee
