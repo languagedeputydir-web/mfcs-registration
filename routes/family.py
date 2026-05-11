@@ -990,8 +990,14 @@ def submit_registration(period_id):
         cult_disc1 = cult_discount_map.get(cid, 0)  if cid  else 0
         cult_disc2 = cult_discount_map.get(cid2, 0) if cid2 else 0
 
-        # Skip student entirely if nothing selected
+        # Skip or clear student if nothing selected
         if not lid and not cid and not cid2:
+            # If they had a previous record, clear it
+            cur.execute(
+                "UPDATE student_record SET lcgrid=NULL, ccgrid=NULL, ccgrid2=NULL "
+                "WHERE sid=%s AND pid=%s",
+                (sid, period_id)
+            )
             continue
 
         student_fee = _calc_student_fee(student, period, cult_fee_amount,
