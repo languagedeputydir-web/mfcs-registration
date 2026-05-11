@@ -1173,6 +1173,7 @@ def finance():
             LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
             LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
             WHERE sr.pid = %s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
             ORDER BY s.fid, s.last_name, s.first_name
         """, (pid,))
         all_students = cur.fetchall()

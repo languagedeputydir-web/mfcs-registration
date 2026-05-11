@@ -1103,6 +1103,7 @@ def submit_registration(period_id):
             LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
             LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
             WHERE sr.pid = %s AND s.fid = %s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
         """, (period_id, current_user.id))
         reg_rows = email_cur.fetchall()
         email_conn.close()
