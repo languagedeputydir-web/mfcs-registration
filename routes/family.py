@@ -1374,7 +1374,6 @@ def fee_summary(period_id):
             minor_count += 1
 
         student_subtotal += student_fee
-        print(f'FEE_SUMMARY DEBUG: {r.get("last_name")} is_adult={r.get("is_adult")} adult={adult} minor_count={minor_count}', flush=True)
         rows.append({**r,
                      'student_fee': student_fee,
                      'fee_note':    fee_note,

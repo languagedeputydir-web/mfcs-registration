@@ -203,8 +203,10 @@
         </tr>
         {% if is_late %}
         <tr class="text-danger">
-          <td colspan="3" class="small">Late registration fee</td>
-          <td class="text-end small">${{ "%.2f"|format(late_fee_amount) }}</td>
+          <td colspan="3" class="small">Late payment fee
+            <span class="text-muted small" id="late-fee-breakdown"></span>
+          </td>
+          <td class="text-end small" id="late-fee-amount">${{ "%.2f"|format(late_fee_amount) }}</td>
         </tr>
         {% endif %}
         <tr id="discount-row" style="display:none">
@@ -301,7 +303,16 @@ function calcFees(){
   const disc  = extra * DISCOUNT;
   const familyRegFee = minors > 0 ? REG_FEE : 0;
   const familyPaFee  = minors > 0 ? PA_DEP  : 0;
-  const total = sub + familyRegFee + familyPaFee + LATE_FEE - disc;
+  const lateFeeTotal = LATE_FEE * minors;
+  const total = sub + familyRegFee + familyPaFee + lateFeeTotal - disc;
+
+  // Update late fee breakdown display
+  const lateBreakdown = document.getElementById('late-fee-breakdown');
+  const lateAmount    = document.getElementById('late-fee-amount');
+  if (lateBreakdown && minors > 0) {
+    lateBreakdown.textContent = '(' + minors + ' minor' + (minors > 1 ? 's' : '') + ' × ' + fmt(LATE_FEE) + ')';
+  }
+  if (lateAmount) lateAmount.textContent = fmt(lateFeeTotal);
 
   // Show/hide reg fee and PA deposit rows in fee info box and fee summary table
   const regInfo   = document.getElementById('reg-fee-info');
