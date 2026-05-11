@@ -1164,12 +1164,12 @@ def submit_registration(period_id):
             )
 
         # Fee summary lines
-        reg_fee_email  = float(period.get('registration_fee') or 0) if minor_cnt > 0 else 0.0
-        pa_dep_email   = float(period.get('pa_assignment_deposit') or 0) if minor_cnt > 0 else 0.0
+        minor_cnt    = sum(1 for r in reg_rows if not _is_adult(r))
         discount_per = float(period.get('discount') or 0)
-        minor_cnt = sum(1 for r in reg_rows if not _is_adult(r))
-        extra_kids = max(0, minor_cnt - 2)
-        disc_amt   = extra_kids * discount_per
+        extra_kids   = max(0, minor_cnt - 2)
+        disc_amt     = extra_kids * discount_per
+        reg_fee_email = float(period.get('registration_fee') or 0) if minor_cnt > 0 else 0.0
+        pa_dep_email  = float(period.get('pa_assignment_deposit') or 0) if minor_cnt > 0 else 0.0
 
         text_summary = ''
         html_summary = ''
