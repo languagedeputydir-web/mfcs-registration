@@ -35,6 +35,7 @@
         <th>Class Name</th>
         <th>Chinese Name</th>
         <th class="text-end">Fee</th>
+        <th class="text-end">MFCS Discount</th>
         <th>Teachers</th>
         <th>TAs</th>
         <th class="text-center">Students<br><span class="fw-normal text-muted" style="font-size:.7rem">pending / assigned</span></th>
@@ -48,6 +49,13 @@
         <td class="fw-500">{{ c.name }}</td>
         <td class="text-muted">{{ c.chinese_name if c.chinese_name not in ('?','') else '—' }}</td>
         <td class="text-end">${{ "%.2f"|format(c.fee or 0) }}</td>
+        <td class="text-end">
+          {% if c.discount and c.discount|float > 0 %}
+          <span class="text-success">-${{ "%.2f"|format(c.discount|float) }}</span>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
         <td class="small">{{ c.teachers if c.teachers else '—' }}</td>
         <td class="small">{{ c.tas if c.tas else '—' }}</td>
         <td class="text-center">

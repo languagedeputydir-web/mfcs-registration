@@ -1204,8 +1204,15 @@ def finance():
             eff_tuit, _ = _effective_tuition(sel, r['family_id'], _conn_tuit)
             _conn_tuit.close()
 
-            # Apply per-family tuition to each student
+            # Apply per-family tuition and MFCS discount to each student
             for s in details:
+                mfcs = s.get('mfcs_affiliation') == 'Y'
+                cf1_raw = float(s.get('cult_fee')  or 0)
+                cf2_raw = float(s.get('cult_fee2') or 0)
+                d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+                d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+                s['cf1'] = max(0.0, cf1_raw - d1)
+                s['cf2'] = max(0.0, cf2_raw - d2)
                 tuit = 0.0 if s['is_adult'] else eff_tuit
                 s['tuition'] = tuit
                 s['student_fee'] = tuit + s['cf1'] + s['cf2']
@@ -1213,6 +1220,9 @@ def finance():
             minor_count = sum(1 for s in details if not s['is_adult'])
             extra_kids  = max(0, minor_count - 2)
             multi_disc  = extra_kids * disc_per
+            # Adult-only families exempt from reg fee and PA deposit
+            fam_reg_fee = reg_fee if minor_count > 0 else 0.0
+            fam_pa_fee  = pa_fee  if minor_count > 0 else 0.0
             fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
             total_paid_fam = float(r.get('total_paid') or 0)
             # Check late fee per family with a fresh connection
@@ -1223,13 +1233,12 @@ def finance():
                 total_paid_fam, fam_late_fee_waived, _conn_tmp
             )
             _conn_tmp.close()
-            # Late fee only applies if there are minors and family is returning
             fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
 
             r['student_details']  = details
             r['student_subtotal'] = sum(s['student_fee'] for s in details)
-            r['reg_fee']          = reg_fee
-            r['pa_fee']           = pa_fee
+            r['reg_fee']          = fam_reg_fee
+            r['pa_fee']           = fam_pa_fee
             r['late_fee']         = fam_late_fee
             r['multi_disc']       = multi_disc
             r['extra_kids']       = extra_kids
@@ -1244,7 +1253,7 @@ def finance():
                 r['late_fee_eligible'] = False
             r['minor_count']    = minor_count
             r['per_minor_late'] = per_minor if charge_late else float(sel.get('late_fee') or 0)
-            r['calc_total']     = r['student_subtotal'] + reg_fee + pa_fee + fam_late_fee - multi_disc
+            r['calc_total']     = r['student_subtotal'] + fam_reg_fee + fam_pa_fee + fam_late_fee - multi_disc
 
     conn.close()
     return render_template('admin/finance.html',
