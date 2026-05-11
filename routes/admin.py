@@ -1144,7 +1144,7 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
-            fr.late_fee_waived,
+            fr.late_fee_waived, fr.tuition_override,
             COUNT(DISTINCT sr.sid) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
@@ -1446,6 +1446,142 @@ def unwaive_late_fee():
     except Exception:
         flash('Cannot update late fee waiver — database column not yet created.', 'error')
     conn.close()
+    return redirect(url_for('admin.finance', pid=pid or None))
+
+
+@admin_bp.route('/payment/set-tuition', methods=['POST'])
+@roles_required('admin','finance')
+def set_tuition_override():
+    fpr_id   = request.form.get('fpr_id')
+    pid      = request.form.get('pid', '')
+    override = request.form.get('override')  # 'grandfathered' or 'standard' or 'clear'
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get family info for email
+    cur.execute("""
+        SELECT f.primary_email, f.first_name_0, f.last_name_0,
+               fr.total_due, fr.fid, p.name AS period_name,
+               p.tuition, p.grandfathered_tuition,
+               p.registration_fee, p.pa_assignment_deposit,
+               p.discount, p.late_fee, p.deadline,
+               p.grandfathered_tuition, p.grandfathered_deadline
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        JOIN period p ON p.id = fr.pid
+        WHERE fr.id = %s
+    """, (fpr_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash('Family record not found.', 'error')
+        return redirect(url_for('admin.finance', pid=pid or None))
+
+    # Set override
+    new_override = None if override == 'clear' else override
+    cur2 = conn.cursor()
+    cur2.execute(
+        "UPDATE family_record SET tuition_override=%s, last_update=NOW() WHERE id=%s",
+        (new_override, fpr_id)
+    )
+    conn.commit()
+
+    # Recalculate total_due with new tuition
+    from routes.family import (_is_adult, _calc_student_fee, _calc_total_family_fee,
+                                _should_charge_late_fee, _effective_tuition, _is_returning_family)
+    period_dict = dict(row)
+    period_dict['id'] = int(pid) if pid else 0
+
+    conn2 = get_db_connection()
+    eff_tuit, tuit_type = _effective_tuition(period_dict, row['fid'], conn2)
+
+    # Get students and fees
+    cur3 = conn2.cursor(dictionary=True)
+    cur3.execute("""
+        SELECT s.is_adult, s.mfcs_affiliation, s.birthday,
+               COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
+               COALESCE(cc.discount,0) AS cult_disc, COALESCE(cc2.discount,0) AS cult_disc2
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        LEFT JOIN class_group_record cc  ON cc.id = sr.ccgrid
+        LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE sr.pid = %s AND s.fid = %s
+    """, (pid, row['fid']))
+    students = cur3.fetchall()
+
+    student_sub = 0.0; minor_count = 0
+    for s in students:
+        mfcs = s.get('mfcs_affiliation') == 'Y'
+        cf1 = max(0, float(s['cult_fee']  or 0) - (float(s['cult_disc']  or 0) if mfcs else 0))
+        cf2 = max(0, float(s['cult_fee2'] or 0) - (float(s['cult_disc2'] or 0) if mfcs else 0))
+        tuit = 0.0 if _is_adult(s) else eff_tuit
+        student_sub += tuit + cf1 + cf2
+        if not _is_adult(s): minor_count += 1
+
+    # Get late fee status
+    cur3.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE id=%s", (fpr_id,))
+    fpr_row = cur3.fetchone() or {}
+    charge_late, per_minor = _should_charge_late_fee(
+        period_dict, row['fid'], int(pid) if pid else 0,
+        float(fpr_row.get('total_paid') or 0),
+        bool(fpr_row.get('late_fee_waived', 0)),
+        conn2
+    )
+    late_fee = minor_count * per_minor if charge_late else 0.0
+    conn2.close()
+
+    new_total = _calc_total_family_fee(student_sub, period_dict, minor_count, late_fee)
+
+    # Update total_due
+    cur2.execute(
+        "UPDATE family_record SET total_due=%s, last_update=NOW() WHERE id=%s",
+        (new_total, fpr_id)
+    )
+    conn.commit()
+    conn.close()
+
+    # Send notification email to family
+    from routes.family import _send_email
+    if override == 'standard':
+        subject = f'MFCS — Tuition Update for {row["period_name"]}'
+        note = 'standard (full) tuition'
+        color = '#e74c3c'
+    else:
+        subject = f'MFCS — Tuition Update for {row["period_name"]}'
+        note = 'returning family (grandfathered) tuition'
+        color = '#27ae60'
+
+    _send_email(
+        to_addr=row['primary_email'],
+        subject=subject,
+        text_body=(
+            f"Dear {row['first_name_0']} {row['last_name_0']},\n\n"
+            f"Your tuition rate for {row['period_name']} has been updated "
+            f"to {note}.\n\n"
+            f"Your new total due is: ${new_total:.2f}\n\n"
+            f"Please log in to your account to view the updated fee summary.\n\n"
+            f"Questions? Contact us at languagedeputydir@mfcsnj.org\n\n"
+            f"Monmouth Fidelity Chinese School"
+        ),
+        html_body=(
+            f"<p>Dear {row['first_name_0']} {row['last_name_0']},</p>"
+            f"<p>Your tuition rate for <strong>{row['period_name']}</strong> has been updated.</p>"
+            f"<div style='background:#f9f9f9;border-left:4px solid {color};"
+            f"padding:12px;margin:16px 0'>"
+            f"<strong>Tuition rate:</strong> {note}<br>"
+            f"<strong>New Total Due: ${new_total:.2f}</strong>"
+            f"</div>"
+            f"<p>Please <a href='https://register.mfcsnj.org'>log in to your account</a> "
+            f"to view the updated fee summary.</p>"
+            f"<p>Questions? Contact us at "
+            f"<a href='mailto:languagedeputydir@mfcsnj.org'>languagedeputydir@mfcsnj.org</a></p>"
+            f"<p>Monmouth Fidelity Chinese School</p>"
+        )
+    )
+
+    label = 'standard tuition' if override == 'standard' else 'grandfathered tuition'
+    flash(f'Tuition switched to {label}. Family notified by email. New total: ${new_total:.2f}', 'success')
     return redirect(url_for('admin.finance', pid=pid or None))
 
 

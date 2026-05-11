@@ -145,21 +145,35 @@ def _effective_tuition(period, family_id, conn):
     """
     Determine the effective tuition for a family registering for a period.
     Rules:
-      - If no grandfathered_tuition set → use period.tuition
-      - If family has a previous family_record in ANY period → existing family
-        - If today <= grandfathered_deadline → use grandfathered_tuition
-        - Else → use period.tuition
-      - New family (no prior records) → always use period.tuition
+      1. If family_record has tuition_override set → use that
+      2. If no grandfathered_tuition set → use period.tuition
+      3. Returning family + today <= grandfathered_deadline → grandfathered_tuition
+      4. Otherwise → period.tuition
     """
-    g_tuition  = period.get('grandfathered_tuition')
-    g_deadline = period.get('grandfathered_deadline')
+    g_tuition   = period.get('grandfathered_tuition')
+    g_deadline  = period.get('grandfathered_deadline')
     std_tuition = float(period.get('tuition') or 0)
+    gran_tuition = float(g_tuition) if g_tuition else std_tuition
+
+    # Check for manual finance override first
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT tuition_override FROM family_record WHERE fid=%s AND pid=%s",
+            (family_id, period['id'])
+        )
+        fpr = cur.fetchone()
+        if fpr and fpr.get('tuition_override') == 'standard':
+            return std_tuition, 'standard (finance override)'
+        if fpr and fpr.get('tuition_override') == 'grandfathered':
+            return gran_tuition, 'grandfathered (finance override)'
+    except Exception:
+        pass
 
     if not g_tuition:
         return std_tuition, 'standard'
 
-    # Check if this family has registered in any PREVIOUS period
-    cur = conn.cursor(dictionary=True)
+    # Check if returning family
     cur.execute(
         "SELECT COUNT(*) AS n FROM family_record "
         "WHERE fid=%s AND pid != %s",
@@ -171,7 +185,7 @@ def _effective_tuition(period, family_id, conn):
     if not is_existing:
         return std_tuition, 'standard (new family)'
 
-    # Existing family — check deadline
+    # Returning family — check grandfathered deadline
     today = date.today()
     if g_deadline:
         try:
@@ -181,11 +195,11 @@ def _effective_tuition(period, family_id, conn):
             else:
                 deadline = g_deadline
             if today <= deadline:
-                return float(g_tuition), 'grandfathered'
+                return gran_tuition, 'grandfathered'
         except Exception:
             pass
 
-    return std_tuition, 'standard (past deadline)' 
+    return std_tuition, 'standard (past deadline)'
 
 def _is_late(period):
     """Return True if today is past the payment deadline."""

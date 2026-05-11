@@ -140,8 +140,7 @@
             Detail
           </button>
           {% if r.late_fee_eligible or r.late_fee_waived %}
-          {% if r.late_fee_waived %}
-          <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
+          {% if r.late_fee_waived %}          <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
             <input type="hidden" name="pid" value="{{ pid }}">
             <button type="submit" class="btn btn-sm btn-warning"
@@ -156,6 +155,41 @@
             <button type="submit" class="btn btn-sm btn-outline-warning"
                     title="Click to waive late fee for this family">
               Waive Late Fee
+            </button>
+          </form>
+          {% endif %}
+          {% endif %}
+
+          {% if r.tuition_override == 'standard' %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="grandfathered">
+            <button type="submit" class="btn btn-sm btn-outline-info"
+                    title="Currently using full tuition — click to switch to grandfathered rate">
+              Full Tuition ↕
+            </button>
+          </form>
+          {% elif r.tuition_override == 'grandfathered' %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="standard">
+            <button type="submit" class="btn btn-sm btn-info"
+                    title="Currently using grandfathered rate — click to switch to full tuition">
+              Gran. Tuition ↕
+            </button>
+          </form>
+          {% else %}
+          {# No override — show toggle only if grandfathered tuition exists for this period #}
+          {% if selected_period and selected_period.grandfathered_tuition %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="standard">
+            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                    title="Switch this family to full tuition">
+              Switch to Full Tuition
             </button>
           </form>
           {% endif %}
