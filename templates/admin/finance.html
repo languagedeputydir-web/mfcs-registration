@@ -170,19 +170,7 @@
               Full Tuition ↕
             </button>
           </form>
-          {% elif r.tuition_override == 'grandfathered' %}
-          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
-            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
-            <input type="hidden" name="pid" value="{{ pid }}">
-            <input type="hidden" name="override" value="standard">
-            <button type="submit" class="btn btn-sm btn-info"
-                    title="Currently using grandfathered rate — click to switch to full tuition">
-              Gran. Tuition ↕
-            </button>
-          </form>
-          {% else %}
-          {# No override — show toggle only if grandfathered tuition exists for this period #}
-          {% if selected_period and selected_period.grandfathered_tuition %}
+          {% elif r.tuition_override == 'grandfathered' or ('grandfathered' in r.tuit_type) %}
           <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
             <input type="hidden" name="pid" value="{{ pid }}">
@@ -192,7 +180,6 @@
               Switch to Full Tuition
             </button>
           </form>
-          {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -224,7 +211,14 @@
                   <td>{{ '$%.2f'|format(s.cf1) if s.cf1 else '—' }}</td>
                   <td>{{ s.cult_class2 or '—' }}</td>
                   <td>{{ '$%.2f'|format(s.cf2) if s.cf2 else '—' }}</td>
-                  <td>{{ '$%.2f'|format(s.tuition) if not s.is_adult else 'N/A' }}</td>
+                  <td>
+                    {% if s.is_adult %}N/A
+                    {% else %}
+                      ${{ '%.2f'|format(s.tuition) }}
+                      {% if 'grandfathered' in r.tuit_type %}<span class="text-success small">✦</span>{% endif %}
+                      {% if r.tuit_type == 'standard (finance override)' %}<span class="text-danger small">⚠</span>{% endif %}
+                    {% endif %}
+                  </td>
                   <td class="text-end fw-500">${{ '%.2f'|format(s.student_fee) }}</td>
                 </tr>
                 {% endfor %}

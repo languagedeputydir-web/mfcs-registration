@@ -1201,8 +1201,9 @@ def finance():
 
             # Get effective tuition for this family (grandfathered or standard)
             _conn_tuit = get_db_connection()
-            eff_tuit, _ = _effective_tuition(sel, r['family_id'], _conn_tuit)
+            eff_tuit, tuit_type = _effective_tuition(sel, r['family_id'], _conn_tuit)
             _conn_tuit.close()
+            r['tuit_type'] = tuit_type
 
             # Apply per-family tuition and MFCS discount to each student
             for s in details:
@@ -1251,6 +1252,13 @@ def finance():
                 r['late_fee_eligible'] = is_ret
             else:
                 r['late_fee_eligible'] = False
+            # Grandfathered tuition eligibility for toggle button
+            _conn_gran = get_db_connection()
+            r['gran_eligible'] = bool(
+                sel and sel.get('grandfathered_tuition') and minor_count > 0 and
+                _is_returning_family(r['family_id'], int(pid), _conn_gran)
+            )
+            _conn_gran.close()
             r['minor_count']    = minor_count
             r['per_minor_late'] = per_minor if charge_late else float(sel.get('late_fee') or 0)
             r['calc_total']     = r['student_subtotal'] + fam_reg_fee + fam_pa_fee + fam_late_fee - multi_disc
