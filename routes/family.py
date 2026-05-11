@@ -1164,23 +1164,33 @@ def submit_registration(period_id):
             )
 
         # Fee summary lines
-        reg_fee  = float(period.get('registration_fee') or 0)
-        pa_dep   = float(period.get('pa_assignment_deposit') or 0)
+        reg_fee_email  = float(period.get('registration_fee') or 0) if minor_cnt > 0 else 0.0
+        pa_dep_email   = float(period.get('pa_assignment_deposit') or 0) if minor_cnt > 0 else 0.0
         discount_per = float(period.get('discount') or 0)
         minor_cnt = sum(1 for r in reg_rows if not _is_adult(r))
         extra_kids = max(0, minor_cnt - 2)
-        disc_amt = extra_kids * discount_per
+        disc_amt   = extra_kids * discount_per
 
-        text_summary = (
-            f"  Registration fee:          ${reg_fee:.2f}\n"
-            f"  PA Assignment Duty deposit: ${pa_dep:.2f} (refundable)\n"
-        )
-        html_summary = (
-            f"<tr><td colspan='5'>Registration fee</td>"
-            f"<td style='text-align:right'>${reg_fee:.2f}</td></tr>"
-            f"<tr><td colspan='5'>PA Assignment Duty deposit (refundable)</td>"
-            f"<td style='text-align:right'>${pa_dep:.2f}</td></tr>"
-        )
+        text_summary = ''
+        html_summary = ''
+        if minor_cnt > 0:
+            text_summary += (
+                f"  Registration fee:          ${reg_fee_email:.2f}\n"
+                f"  PA Assignment Duty deposit: ${pa_dep_email:.2f} (refundable)\n"
+            )
+            html_summary += (
+                f"<tr><td colspan='5'>Registration fee</td>"
+                f"<td style='text-align:right'>${reg_fee_email:.2f}</td></tr>"
+                f"<tr><td colspan='5'>PA Assignment Duty deposit (refundable)</td>"
+                f"<td style='text-align:right'>${pa_dep_email:.2f}</td></tr>"
+            )
+        if late_fee_total > 0:
+            text_summary += f"  Late payment fee ({minor_cnt} minor{'s' if minor_cnt>1 else ''} × ${float(period.get('late_fee') or 0):.2f}): ${late_fee_total:.2f}\n"
+            html_summary += (
+                f"<tr><td colspan='5' style='color:red'>Late payment fee "
+                f"({minor_cnt} minor{'s' if minor_cnt>1 else ''} × ${float(period.get('late_fee') or 0):.2f})</td>"
+                f"<td style='text-align:right;color:red'>${late_fee_total:.2f}</td></tr>"
+            )
         if disc_amt > 0:
             text_summary += f"  Multi-child discount ({extra_kids} child{'ren' if extra_kids>1 else ''}): -${disc_amt:.2f}\n"
             html_summary += (f"<tr><td colspan='5' style='color:green'>Multi-child discount "
