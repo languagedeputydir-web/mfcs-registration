@@ -1350,6 +1350,7 @@ def fee_summary(period_id):
     raw_rows = cur.fetchall()
     reg_fee  = float(period.get('registration_fee') or 0) if period else 0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
+    # Will be recalculated after minor_count is known below
 
     # Determine effective tuition for this family
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn) if period else (0, 'standard')
@@ -1394,6 +1395,9 @@ def fee_summary(period_id):
                      'is_adult':    adult})
 
     # Multi-kid discount
+    # Apply adult-only exemption to reg fee and PA deposit
+    reg_fee  = float(period.get('registration_fee') or 0) if (period and minor_count > 0) else 0.0
+    pa_fee   = float(period.get('pa_assignment_deposit') or 0) if (period and minor_count > 0) else 0.0
     discount_per = float(period.get('discount') or 0) if period else 0
     extra_kids   = max(0, minor_count - 2)
     multi_disc   = extra_kids * discount_per
