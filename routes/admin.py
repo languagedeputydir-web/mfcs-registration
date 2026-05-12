@@ -1275,11 +1275,21 @@ def finance():
 @admin_bp.route('/finance/update', methods=['POST'])
 @roles_required('admin','finance')
 def finance_update():
-    fpr_id = request.form.get('fpr_id')
-    total_paid = request.form.get('total_paid','').strip()
-    note = request.form.get('description','').strip()
-    mark_done = request.form.get('mark_complete')
-    pid = request.form.get('pid')
+    fpr_id             = request.form.get('fpr_id')
+    total_paid         = request.form.get('total_paid','').strip()
+    note               = request.form.get('description','').strip()
+    mark_done          = request.form.get('mark_complete')
+    pid                = request.form.get('pid')
+    first_payment_date = request.form.get('first_payment_date','').strip() or None
+
+    # Validate date format
+    if first_payment_date:
+        try:
+            from datetime import datetime as dt
+            first_payment_date = dt.strptime(first_payment_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except Exception:
+            first_payment_date = None
+
     if not fpr_id: flash('No record.','error'); return redirect(url_for('admin.finance'))
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM family_record WHERE id=%s",(fpr_id,)); fpr = cur.fetchone()
@@ -1291,6 +1301,9 @@ def finance_update():
     new_status = request.form.get('reg_status','').strip()
     if new_status in ('Complete Registration','Pending'):
         updates.append("reg_status=%s"); params.append(new_status)
+    if first_payment_date:
+        updates.append("first_payment_date=%s"); params.append(first_payment_date)
+        print(f"FINANCE_UPDATE DEBUG: fpr_id={fpr_id} first_payment_date={first_payment_date}", flush=True)
     params.append(int(fpr_id))
     cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
     conn.commit(); conn.close(); flash('Payment updated.','success')
@@ -1642,10 +1655,8 @@ def update_payment():
         updates.append("first_payment_date=%s"); params.append(first_payment_date)
     params.append(int(fpr_id))
     sql = f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s"
-    print(f"UPDATE_PAYMENT DEBUG: fpr_id={fpr_id} first_payment_date={first_payment_date} sql={sql} params={params}", flush=True)
     cur2.execute(sql, params)
     conn.commit()
-    print(f"UPDATE_PAYMENT DEBUG: rowcount={cur2.rowcount}", flush=True)
 
     # Send confirmation email if status changed to Complete Registration
     if reg_status == 'Complete Registration' and old_status != 'Complete Registration':
