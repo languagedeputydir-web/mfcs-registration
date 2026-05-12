@@ -462,6 +462,9 @@ def delete_facility(fid):
     conn.commit(); conn.close()
     flash('Facility deleted.', 'success')
     return redirect(url_for('admin.facility_list', pid=pid))
+
+
+@admin_bp.route('/staff/teacher/new', methods=['GET','POST'])
 @roles_required('admin','language','culture')
 def new_teacher():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
