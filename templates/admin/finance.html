@@ -129,7 +129,7 @@
                   data-paid="{{ r.total_paid or 0 }}"
                   data-note="{{ r.description or '' }}"
                   data-status="{{ r.reg_status }}"
-                  data-paymentdate="{{ r.first_payment_date or '' }}"
+                  data-paymentdate="{{ r.first_payment_date.strftime('%Y-%m-%d') if r.first_payment_date else '' }}"
                   data-pid="{{ selected_period.id if selected_period else '' }}">
             Update
           </button>
@@ -357,9 +357,12 @@ payModal.addEventListener('show.bs.modal', e => {
   document.getElementById('modal_paid').value    = parseFloat(btn.dataset.paid).toFixed(2);
   document.getElementById('modal_note').value    = btn.dataset.note;
   document.getElementById('modal_status').value  = btn.dataset.status || 'Pending';
-  // Set first payment date — use existing if set, otherwise today
+  // Set first payment date — use existing if set, otherwise today (local date)
   const existingDate = btn.dataset.paymentdate;
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0');
   document.getElementById('modal_payment_date').value = existingDate || today;
 });
 </script>

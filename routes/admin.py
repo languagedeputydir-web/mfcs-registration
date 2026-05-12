@@ -1615,6 +1615,13 @@ def update_payment():
     total_paid         = request.form.get('total_paid','').strip()
     note               = request.form.get('description','').strip()
     first_payment_date = request.form.get('first_payment_date','').strip() or None
+    # Validate date format to avoid timezone issues
+    if first_payment_date:
+        try:
+            from datetime import datetime as dt
+            first_payment_date = dt.strptime(first_payment_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except Exception:
+            first_payment_date = None
 
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
 
