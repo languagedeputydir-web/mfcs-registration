@@ -77,12 +77,20 @@ def _check(plain, stored):
         pass
     return plain == stored
 
-def _age(birthday):
+def _today_eastern():
+    """Return today's date in US Eastern time (avoids UTC off-by-one at night)."""
+    try:
+        import pytz
+        from datetime import datetime as dt
+        return dt.now(pytz.timezone('America/New_York')).date()
+    except ImportError:
+        from datetime import datetime as dt, timezone, timedelta
+        return dt.now(timezone(timedelta(hours=-4))).date()  # approximate EDT
     """Return age in years from a date/datetime object, or None.
     Returns None for missing/sentinel dates (None, 2999-01-01)."""
     if not birthday:
         return None
-    today = date.today()
+    today = _today_eastern()
     try:
         bd = birthday if isinstance(birthday, date) else birthday.date()
         # Treat legacy sentinel 2999-01-01 as unknown
@@ -186,8 +194,7 @@ def _effective_tuition(period, family_id, conn):
         return std_tuition, 'standard (new family)'
 
     # Returning family — check grandfathered deadline
-    today = date.today()
-    print(f"_effective_tuition DEBUG: today={today} g_deadline={g_deadline!r} type={type(g_deadline)}", flush=True)
+    today = _today_eastern()
     if g_deadline:
         try:
             if isinstance(g_deadline, str):
@@ -217,7 +224,7 @@ def _is_late(period):
             deadline_date = deadline if isinstance(deadline, date) else deadline.date()
         else:
             return False
-        return date.today() > deadline_date
+        return _today_eastern() > deadline_date
     except Exception as e:
         print(f'_is_late error: {e}', flush=True)
         return False
@@ -956,7 +963,7 @@ def register_classes(period_id):
                            tuition_type=tuition_type,
                            is_late=is_late_flag,
                            late_fee_amount=late_fee_amount,
-                           now_date=date.today().strftime('%Y-%m-%d'))
+                           now_date=_today_eastern().strftime('%Y-%m-%d'))
 
 
 @family_bp.route('/register/<int:period_id>/submit', methods=['POST'])
