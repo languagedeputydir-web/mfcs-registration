@@ -64,6 +64,12 @@
         <td>
           <a href="{{ url_for('admin.edit_teacher', tid=t.id) }}"
              class="btn btn-sm btn-outline-secondary">Edit</a>
+          <form method="post" action="{{ url_for('admin.delete_teacher', tid=t.id) }}"
+                class="d-inline ms-1"
+                onsubmit="return confirm('Delete {{ t.first_name }} {{ t.last_name }}?')">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
         </td>
       </tr>
       {% else %}

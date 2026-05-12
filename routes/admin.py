@@ -442,7 +442,26 @@ def facility_list():
         facilities=facilities, periods_list=plist,
         selected_period=sel_period, current_period=period, pid=pid)
 
-@admin_bp.route('/staff/teacher/new', methods=['GET','POST'])
+@admin_bp.route('/staff/teacher/<int:tid>/delete', methods=['POST'])
+@roles_required('admin')
+def delete_teacher(tid):
+    pid = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("DELETE FROM teacher_record WHERE id=%s", (tid,))
+    conn.commit(); conn.close()
+    flash('Teacher/TA deleted.', 'success')
+    return redirect(url_for('admin.staff_list', pid=pid))
+
+
+@admin_bp.route('/staff/facility/<int:fid>/delete', methods=['POST'])
+@roles_required('admin')
+def delete_facility(fid):
+    pid = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("DELETE FROM facility_record WHERE id=%s", (fid,))
+    conn.commit(); conn.close()
+    flash('Facility deleted.', 'success')
+    return redirect(url_for('admin.facility_list', pid=pid))
 @roles_required('admin','language','culture')
 def new_teacher():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
@@ -1303,7 +1322,6 @@ def finance_update():
         updates.append("reg_status=%s"); params.append(new_status)
     if first_payment_date:
         updates.append("first_payment_date=%s"); params.append(first_payment_date)
-        print(f"FINANCE_UPDATE DEBUG: fpr_id={fpr_id} first_payment_date={first_payment_date}", flush=True)
     params.append(int(fpr_id))
     cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
     conn.commit(); conn.close(); flash('Payment updated.','success')
