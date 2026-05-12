@@ -1169,7 +1169,7 @@ def finance():
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
             fr.late_fee_waived, fr.tuition_override, fr.first_payment_date,
-            COUNT(DISTINCT sr.sid) AS student_count
+            COUNT(DISTINCT CASE WHEN (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL) THEN sr.sid END) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
             LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid

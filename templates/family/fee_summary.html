@@ -177,18 +177,22 @@
     • Students <strong>18 or older</strong>: Cultural program fee(s) only<br>
     • Language program: included in tuition &nbsp;·&nbsp;
       Up to 2 cultural programs per student
-    {% if period and period.grandfathered_tuition and period.grandfathered_deadline and period.grandfathered_deadline|string != '2999-01-01' %}
+    {% if period and period.grandfathered_tuition and period.grandfathered_deadline and period.grandfathered_deadline|string != '2999-01-01' and 'grandfathered' in tuition_type %}
     <hr class="my-2">
     • The returning family tuition rate of <strong>${{ "%.2f"|format(period.grandfathered_tuition) }}</strong>
       applies only to returning families whose registration is submitted and payment is
       received by <strong>{{ period.grandfathered_deadline }}</strong>.
       Payments received after this date will be assessed at the standard tuition rate.
     {% endif %}
+    {% if period and period.late_fee and period.late_fee|float > 0 and period.deadline and period.deadline|string != '2999-01-01' %}
+    {% if not (tuition_type and 'new family' in tuition_type) %}
     <hr class="my-2">
-    • Payments must be received by the stated due date. A <strong>${{ "%.0f"|format(period.late_fee or 35) }} late fee per child</strong>
-      will be applied to payments received after
+    • A <strong>${{ "%.0f"|format(period.late_fee) }} late fee per child</strong>
+      applies to returning families whose payment is received after
       <strong>{{ period.deadline }}</strong>.
-      This late fee does not apply to new families.<br>
+    {% endif %}
+    {% endif %}
+    <hr class="my-2">
     • A <strong>$40 non-sufficient funds (NSF) fee</strong> will be assessed for any
       returned checks or declined bank payments.
   </div>

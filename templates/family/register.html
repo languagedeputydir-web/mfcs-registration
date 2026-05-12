@@ -154,6 +154,16 @@
       </div>
 
     </div><!-- row -->
+
+    <!-- Dance class notice — shown via JS when dance class selected -->
+    <div id="dance-notice-{{ s.id }}" class="alert alert-info small mt-2 mb-0 py-2" style="display:none">
+      ℹ️ <strong>Performance Dress Notice:</strong>
+      Students enrolled in Chinese Traditional &amp; Pop Dance or Chinese Folk Dance will be
+      required to purchase a performance dress. The cost of the dress will be billed
+      separately and is not included in the cultural program fee listed above.
+      The dress will become the family's property.
+    </div>
+
   </div><!-- card -->
   {% endfor %}
 
@@ -269,6 +279,29 @@ const CULT_FEES = { {% for c in cult_classes_all %}"{{c.id}}":{{c.fee or 0}},{% 
 const CULT_DISC = { {% for c in cult_classes_all %}"{{c.id}}":{{c.discount or 0}},{% endfor %} };
 const CULT_NAMES = { {% for c in cult_classes_all %}"{{c.id}}":"{{c.name}}",{% endfor %} };
 const LANG_NAMES = { {% for c in lang_classes %}"{{c.id}}":"{{c.name}}",{% endfor %} };
+
+// Dance class notice
+const DANCE_KEYWORDS = ['folk dance', 'traditional', 'pop dance'];
+function isDanceClass(classId) {
+  if (!classId || classId === '0') return false;
+  const name = (CULT_NAMES[classId] || '').toLowerCase();
+  return DANCE_KEYWORDS.some(k => name.includes(k));
+}
+function updateDanceNotice(sid) {
+  const cult1 = document.getElementById('cult1_' + sid);
+  const cult2 = document.getElementById('cult2_' + sid);
+  const notice = document.getElementById('dance-notice-' + sid);
+  if (!notice) return;
+  const hasDance = isDanceClass(cult1 && cult1.value) || isDanceClass(cult2 && cult2.value);
+  notice.style.display = hasDance ? '' : 'none';
+}
+STUDENTS.forEach(function(s) {
+  ['cult1_', 'cult2_'].forEach(function(prefix) {
+    const sel = document.getElementById(prefix + s.sid);
+    if (sel) sel.addEventListener('change', function() { updateDanceNotice(s.sid); });
+  });
+  updateDanceNotice(s.sid);
+});
 
 function fmt(n){ return '$' + parseFloat(n).toFixed(2); }
 
