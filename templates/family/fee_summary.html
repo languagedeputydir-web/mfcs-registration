@@ -133,7 +133,7 @@
                    - (fpr.total_paid or 0)|float
                    - (fpr.adjustment or 0)|float %}
     <tr class="{{ 'table-danger' if balance > 0.01 else 'table-success' }}">
-      <td class="fw-600">Balance owing</td>
+      <td class="fw-600">Remaining Balance</td>
       <td class="text-end fw-600">${{ "%.2f"|format(balance) }}</td>
     </tr>
   </table>
@@ -177,6 +177,20 @@
     • Students <strong>18 or older</strong>: Cultural program fee(s) only<br>
     • Language program: included in tuition &nbsp;·&nbsp;
       Up to 2 cultural programs per student
+    {% if period and period.grandfathered_tuition and period.grandfathered_deadline and period.grandfathered_deadline|string != '2999-01-01' %}
+    <hr class="my-2">
+    • The returning family tuition rate of <strong>${{ "%.2f"|format(period.grandfathered_tuition) }}</strong>
+      applies only to returning families whose registration is submitted and payment is
+      received by <strong>{{ period.grandfathered_deadline }}</strong>.
+      Payments received after this date will be assessed at the standard tuition rate.
+    {% endif %}
+    <hr class="my-2">
+    • Payments must be received by the stated due date. A <strong>${{ "%.0f"|format(period.late_fee or 35) }} late fee per child</strong>
+      will be applied to payments received after
+      <strong>{{ period.deadline }}</strong>.
+      This late fee does not apply to new families.<br>
+    • A <strong>$40 non-sufficient funds (NSF) fee</strong> will be assessed for any
+      returned checks or declined bank payments.
   </div>
 </div>
 
@@ -194,7 +208,7 @@
     <br>{{ period.street_address }}, {{ period.city }}, {{ period.state }} {{ period.zip }}
     {% endif %}
     {% if period.deadline and period.deadline|string != '2999-01-01' %}
-    <br><strong>Payment due by: {{ period.deadline }}</strong>
+    <br><strong>Payment received by: {{ period.deadline }}</strong>
     {% endif %}
   </div>
 </div>

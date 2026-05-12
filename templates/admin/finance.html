@@ -264,7 +264,7 @@
                 </tr>
                 {% set balance = (r.total_due or 0)|float - (r.total_paid or 0)|float - (r.adjustment or 0)|float %}
                 <tr class="{{ 'text-danger fw-bold' if balance > 0 else 'text-success' }}">
-                  <td colspan="8" class="text-end small">Balance owing</td>
+                  <td colspan="8" class="text-end small">Remaining Balance</td>
                   <td class="text-end small">${{ '%.2f'|format(balance) }}</td>
                 </tr>
               </tfoot>

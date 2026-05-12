@@ -1112,7 +1112,7 @@ def submit_registration(period_id):
             if fee_changed:
                 flash('Registration updated. Fee changed — awaiting payment confirmation.', 'info')
             else:
-                flash('Registration saved!', 'success')
+                flash('Registration submitted!', 'success')
     else:
         cur.execute(
             "INSERT INTO family_record "
@@ -1120,7 +1120,7 @@ def submit_registration(period_id):
             "VALUES (%s, %s, %s, 'Pending', NOW(), NOW())",
             (current_user.id, period_id, total_due)
         )
-        flash('Registration saved!', 'success')
+        flash('Registration submitted!', 'success')
 
     conn.commit()
     conn.close()
