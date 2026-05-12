@@ -187,17 +187,20 @@ def _effective_tuition(period, family_id, conn):
 
     # Returning family — check grandfathered deadline
     today = date.today()
+    print(f"_effective_tuition DEBUG: today={today} g_deadline={g_deadline!r} type={type(g_deadline)}", flush=True)
     if g_deadline:
         try:
             if isinstance(g_deadline, str):
                 from datetime import datetime as dt
                 deadline = dt.strptime(g_deadline, '%Y-%m-%d').date()
+            elif hasattr(g_deadline, 'date'):
+                deadline = g_deadline.date()  # datetime → date
             else:
-                deadline = g_deadline
+                deadline = g_deadline  # already a date
             if today <= deadline:
                 return gran_tuition, 'grandfathered'
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"_effective_tuition deadline error: {e} g_deadline={g_deadline!r}", flush=True)
 
     return std_tuition, 'standard (past deadline)'
 
