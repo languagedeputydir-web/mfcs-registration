@@ -164,6 +164,14 @@
       All costumes will become the family's property.
     </div>
 
+    <!-- T-shirt notice — shown via JS when kung fu or yoyo class selected -->
+    <div id="tshirt-notice-{{ s.id }}" class="alert alert-info small mt-2 mb-0 py-2" style="display:none">
+      ℹ️ <strong>Team T-Shirt Notice:</strong>
+      Students enrolled in Kung Fu or Yo-Yo programs who wish to purchase a team T-shirt
+      may do so for an additional fee. T-shirt costs will be billed separately and are
+      not included in the cultural program fee.
+    </div>
+
   </div><!-- card -->
   {% endfor %}
 
@@ -282,10 +290,17 @@ const LANG_NAMES = { {% for c in lang_classes %}"{{c.id}}":"{{c.name}}",{% endfo
 
 // Dance class notice
 const DANCE_KEYWORDS = ['folk dance', 'traditional', 'pop dance'];
+const TSHIRT_KEYWORDS = ['kung fu', 'yo-yo', 'yoyo', 'yo yo'];
+
 function isDanceClass(classId) {
   if (!classId || classId === '0') return false;
   const name = (CULT_NAMES[classId] || '').toLowerCase();
   return DANCE_KEYWORDS.some(k => name.includes(k));
+}
+function isTshirtClass(classId) {
+  if (!classId || classId === '0') return false;
+  const name = (CULT_NAMES[classId] || '').toLowerCase();
+  return TSHIRT_KEYWORDS.some(k => name.includes(k));
 }
 function updateDanceNotice(sid) {
   const cult1 = document.getElementById('cult1_' + sid);
@@ -295,12 +310,24 @@ function updateDanceNotice(sid) {
   const hasDance = isDanceClass(cult1 && cult1.value) || isDanceClass(cult2 && cult2.value);
   notice.style.display = hasDance ? '' : 'none';
 }
+function updateTshirtNotice(sid) {
+  const cult1 = document.getElementById('cult1_' + sid);
+  const cult2 = document.getElementById('cult2_' + sid);
+  const notice = document.getElementById('tshirt-notice-' + sid);
+  if (!notice) return;
+  const hasTshirt = isTshirtClass(cult1 && cult1.value) || isTshirtClass(cult2 && cult2.value);
+  notice.style.display = hasTshirt ? '' : 'none';
+}
 STUDENTS.forEach(function(s) {
   ['cult1_', 'cult2_'].forEach(function(prefix) {
     const sel = document.getElementById(prefix + s.sid);
-    if (sel) sel.addEventListener('change', function() { updateDanceNotice(s.sid); });
+    if (sel) sel.addEventListener('change', function() {
+      updateDanceNotice(s.sid);
+      updateTshirtNotice(s.sid);
+    });
   });
   updateDanceNotice(s.sid);
+  updateTshirtNotice(s.sid);
 });
 
 function fmt(n){ return '$' + parseFloat(n).toFixed(2); }
