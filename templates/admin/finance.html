@@ -129,6 +129,7 @@
                   data-paid="{{ r.total_paid or 0 }}"
                   data-note="{{ r.description or '' }}"
                   data-status="{{ r.reg_status }}"
+                  data-paymentdate="{{ r.first_payment_date or '' }}"
                   data-pid="{{ selected_period.id if selected_period else '' }}">
             Update
           </button>
@@ -313,6 +314,15 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label small fw-500">First Payment Date
+              <span class="text-muted fw-400 small">— used to determine if late fee applies</span>
+            </label>
+            <input type="date" name="first_payment_date" id="modal_payment_date"
+                   class="form-control form-control-sm" style="max-width:200px">
+            <div class="form-text">Defaults to today. Adjust if cheque was postmarked on a different date.</div>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label small fw-500">Payment Note</label>
             <textarea name="description" id="modal_note" class="form-control form-control-sm"
                       rows="5" style="min-height:120px"
@@ -347,6 +357,10 @@ payModal.addEventListener('show.bs.modal', e => {
   document.getElementById('modal_paid').value    = parseFloat(btn.dataset.paid).toFixed(2);
   document.getElementById('modal_note').value    = btn.dataset.note;
   document.getElementById('modal_status').value  = btn.dataset.status || 'Pending';
+  // Set first payment date — use existing if set, otherwise today
+  const existingDate = btn.dataset.paymentdate;
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('modal_payment_date').value = existingDate || today;
 });
 </script>
 {% endblock %}

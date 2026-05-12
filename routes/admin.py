@@ -116,20 +116,22 @@ def _recalc_family_record(cur, fid, pid):
         )
     minor_count = sum(1 for r in rows if not _is_adult(r))
 
-    # Get current payment and waiver status (late_fee_waived may not exist yet)
     try:
-        cur.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        cur.execute("SELECT total_paid, late_fee_waived, first_payment_date FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
         fpr_row = cur.fetchone() or {}
-        total_paid_so_far = float(fpr_row.get('total_paid') or 0)
-        late_fee_waived   = bool(fpr_row.get('late_fee_waived', 0))
+        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived    = bool(fpr_row.get('late_fee_waived', 0))
+        first_payment_date = fpr_row.get('first_payment_date')
     except Exception:
         cur.execute("SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
         fpr_row = cur.fetchone() or {}
-        total_paid_so_far = float(fpr_row.get('total_paid') or 0)
-        late_fee_waived   = False
+        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived    = False
+        first_payment_date = None
 
     charge_late, per_minor_late = _should_charge_late_fee(
-        period, fid, pid, total_paid_so_far, late_fee_waived, None
+        period, fid, pid, total_paid_so_far, late_fee_waived, None,
+        first_payment_date=first_payment_date
     )
     late_fee_total = minor_count * per_minor_late if charge_late else 0.0
     new_total = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
@@ -1144,7 +1146,7 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
-            fr.late_fee_waived, fr.tuition_override,
+            fr.late_fee_waived, fr.tuition_override, fr.first_payment_date,
             COUNT(DISTINCT sr.sid) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
@@ -1232,7 +1234,8 @@ def finance():
             _conn_tmp = get_db_connection()
             charge_late, per_minor = _sclf(
                 sel, r['family_id'], int(pid),
-                total_paid_fam, fam_late_fee_waived, _conn_tmp
+                total_paid_fam, fam_late_fee_waived, _conn_tmp,
+                first_payment_date=r.get('first_payment_date')
             )
             _conn_tmp.close()
             fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
@@ -1606,18 +1609,20 @@ def set_tuition_override():
 @admin_bp.route('/payment/update', methods=['POST'])
 @roles_required('admin','finance')
 def update_payment():
-    fpr_id    = request.form.get('fpr_id')
-    family_id = request.form.get('family_id')
-    reg_status= request.form.get('reg_status','').strip()
-    total_paid= request.form.get('total_paid','').strip()
-    note      = request.form.get('description','').strip()
+    fpr_id             = request.form.get('fpr_id')
+    family_id          = request.form.get('family_id')
+    reg_status         = request.form.get('reg_status','').strip()
+    total_paid         = request.form.get('total_paid','').strip()
+    note               = request.form.get('description','').strip()
+    first_payment_date = request.form.get('first_payment_date','').strip() or None
 
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
 
     # Get previous status before updating
-    cur.execute("SELECT reg_status, total_due, total_paid FROM family_record WHERE id=%s", (int(fpr_id),))
+    cur.execute("SELECT reg_status, total_due, total_paid, first_payment_date FROM family_record WHERE id=%s", (int(fpr_id),))
     fpr_before = cur.fetchone()
     old_status = (fpr_before or {}).get('reg_status', '')
+    existing_payment_date = (fpr_before or {}).get('first_payment_date')
 
     cur2 = conn.cursor()
     updates = ["last_update=NOW()"]; params = []
@@ -1626,6 +1631,11 @@ def update_payment():
         try: updates.append("total_paid=%s"); params.append(float(total_paid))
         except: pass
     updates.append("description=%s"); params.append(note)
+    # Only set first_payment_date if not already set (preserve original payment date)
+    if first_payment_date and not existing_payment_date:
+        updates.append("first_payment_date=%s"); params.append(first_payment_date)
+    elif first_payment_date and first_payment_date != str(existing_payment_date or ''):
+        updates.append("first_payment_date=%s"); params.append(first_payment_date)
     params.append(int(fpr_id))
     cur2.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
     conn.commit()

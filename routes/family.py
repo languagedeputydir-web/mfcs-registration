@@ -231,29 +231,54 @@ def _is_returning_family(family_id, current_pid, conn):
     return (row['n'] > 0) if row else False
 
 
-def _should_charge_late_fee(period, family_id, current_pid, total_paid, late_fee_waived, conn):
+def _should_charge_late_fee(period, family_id, current_pid, total_paid, late_fee_waived, conn,
+                            first_payment_date=None):
     """
     Returns (charge_late, minor_late_fee) where:
       charge_late     = True if late fee should be applied
       minor_late_fee  = per-minor late fee amount
     Rules:
       1. New family → no late fee
-      2. Returning family + today > deadline + total_paid = 0 → late fee per minor
-      3. Returning family + total_paid > 0 → no late fee (payment received)
-      4. Finance waived → no late fee
+      2. Returning family + first_payment_date IS NULL → late fee
+      3. Returning family + first_payment_date <= deadline → no late fee
+      4. Returning family + first_payment_date > deadline → late fee
+      5. Finance waived → no late fee
     """
     if late_fee_waived:
         return False, 0.0
     if not _is_late(period):
         return False, 0.0
-    if float(total_paid or 0) > 0:
-        return False, 0.0
-    # Check if returning family — needs a DB connection
     if conn is None:
         return False, 0.0
     if not _is_returning_family(family_id, current_pid, conn):
         return False, 0.0
-    return True, float(period.get('late_fee') or 0)
+
+    # Get payment deadline
+    deadline = period.get('deadline')
+    if not deadline:
+        return True, float(period.get('late_fee') or 0)
+
+    try:
+        if isinstance(deadline, str):
+            from datetime import datetime as dt
+            deadline_date = dt.strptime(deadline, '%Y-%m-%d').date()
+        else:
+            deadline_date = deadline if isinstance(deadline, date) else deadline.date()
+
+        if first_payment_date:
+            if isinstance(first_payment_date, str):
+                from datetime import datetime as dt2
+                pd = dt2.strptime(first_payment_date, '%Y-%m-%d').date()
+            elif hasattr(first_payment_date, 'year'):
+                pd = first_payment_date if isinstance(first_payment_date, date) else first_payment_date.date()
+            else:
+                pd = None
+            if pd and pd <= deadline_date:
+                return False, 0.0  # Paid on time
+        # No payment date or paid late
+        return True, float(period.get('late_fee') or 0)
+    except Exception:
+        return True, float(period.get('late_fee') or 0)
 
 
 def _calc_total_family_fee(student_subtotal, period, minor_count=0, late_fee=0.0):
@@ -883,12 +908,13 @@ def register_classes(period_id):
     try:
         cur2 = conn2.cursor(dictionary=True)
         cur2.execute(
-            "SELECT total_paid, late_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
+            "SELECT total_paid, late_fee_waived, first_payment_date FROM family_record WHERE fid=%s AND pid=%s",
             (current_user.id, period_id)
         )
         fpr_row = cur2.fetchone()
-        total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
-        late_fee_waived   = bool((fpr_row or {}).get('late_fee_waived', 0))
+        total_paid_so_far  = float((fpr_row or {}).get('total_paid') or 0)
+        late_fee_waived    = bool((fpr_row or {}).get('late_fee_waived', 0))
+        first_payment_date = (fpr_row or {}).get('first_payment_date')
     except Exception:
         try:
             cur2 = conn2.cursor(dictionary=True)
@@ -900,14 +926,16 @@ def register_classes(period_id):
             total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
         except Exception:
             total_paid_so_far = 0.0
-        late_fee_waived = False
+        late_fee_waived    = False
+        first_payment_date = None
 
     conn2.close()
 
     conn2 = get_db_connection()
     charge_late, per_minor_late = _should_charge_late_fee(
         period, current_user.id, period_id,
-        total_paid_so_far, late_fee_waived, conn2
+        total_paid_so_far, late_fee_waived, conn2,
+        first_payment_date=first_payment_date
     )
     conn2.close()
     late_fee_amount = per_minor_late if charge_late else 0.0
@@ -1409,13 +1437,15 @@ def fee_summary(period_id):
     extra_kids   = max(0, minor_count - 2)
     multi_disc   = extra_kids * discount_per
 
-    # Late fee: per minor, returning families, unpaid past deadline
-    late_fee_waived   = bool((fpr or {}).get('late_fee_waived', 0))
-    total_paid_so_far = float((fpr or {}).get('total_paid') or 0)
+    # Late fee: per minor, returning families, based on first payment date vs deadline
+    late_fee_waived    = bool((fpr or {}).get('late_fee_waived', 0))
+    total_paid_so_far  = float((fpr or {}).get('total_paid') or 0)
+    first_payment_date = (fpr or {}).get('first_payment_date')
     conn3 = get_db_connection()
     charge_late, per_minor_late = _should_charge_late_fee(
         period, current_user.id, period_id,
-        total_paid_so_far, late_fee_waived, conn3
+        total_paid_so_far, late_fee_waived, conn3,
+        first_payment_date=first_payment_date
     )
     conn3.close()
     late_fee    = minor_count * per_minor_late if charge_late else 0.0
