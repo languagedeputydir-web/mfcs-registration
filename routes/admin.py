@@ -1638,14 +1638,14 @@ def update_payment():
         try: updates.append("total_paid=%s"); params.append(float(total_paid))
         except: pass
     updates.append("description=%s"); params.append(note)
-    # Only set first_payment_date if not already set (preserve original payment date)
-    if first_payment_date and not existing_payment_date:
-        updates.append("first_payment_date=%s"); params.append(first_payment_date)
-    elif first_payment_date and first_payment_date != str(existing_payment_date or ''):
+    if first_payment_date:
         updates.append("first_payment_date=%s"); params.append(first_payment_date)
     params.append(int(fpr_id))
-    cur2.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
+    sql = f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s"
+    print(f"UPDATE_PAYMENT DEBUG: fpr_id={fpr_id} first_payment_date={first_payment_date} sql={sql} params={params}", flush=True)
+    cur2.execute(sql, params)
     conn.commit()
+    print(f"UPDATE_PAYMENT DEBUG: rowcount={cur2.rowcount}", flush=True)
 
     # Send confirmation email if status changed to Complete Registration
     if reg_status == 'Complete Registration' and old_status != 'Complete Registration':
