@@ -205,7 +205,9 @@ def dashboard():
     fee_changed_count = 0
     if period:
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr WHERE sr.pid=%s""",(period['id'],))
+            FROM student_record sr WHERE sr.pid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
         registered_students = cur.fetchone()['n']
         cur.execute("""SELECT COALESCE(SUM(total_paid),0) AS tot
             FROM family_record WHERE pid=%s""",(period['id'],))
