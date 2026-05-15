@@ -949,14 +949,18 @@ def register_classes(period_id):
     )
     conn2.close()
     late_fee_amount = per_minor_late if charge_late else 0.0
-    # Check reg fee waiver
+    # Check reg fee waiver — use fresh connection to avoid cursor sync issues
     try:
-        cur.execute("SELECT reg_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
-                    (current_user.id, period_id))
-        _fpr_w = cur.fetchone()
+        _conn_w = get_db_connection()
+        _cur_w  = _conn_w.cursor(dictionary=True)
+        _cur_w.execute("SELECT reg_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
+                       (current_user.id, period_id))
+        _fpr_w = _cur_w.fetchone()
+        _conn_w.close()
         reg_fee_waived = bool((_fpr_w or {}).get('reg_fee_waived', 0))
         print(f"REG_FEE_WAIVED DEBUG: fid={current_user.id} pid={period_id} fpr_w={_fpr_w} waived={reg_fee_waived}", flush=True)
-    except Exception:
+    except Exception as e:
+        print(f"REG_FEE_WAIVED ERROR: {e}", flush=True)
         reg_fee_waived = False
 
     return render_template('family/register.html',
