@@ -955,6 +955,7 @@ def register_classes(period_id):
                     (current_user.id, period_id))
         _fpr_w = cur.fetchone()
         reg_fee_waived = bool((_fpr_w or {}).get('reg_fee_waived', 0))
+        print(f"REG_FEE_WAIVED DEBUG: fid={current_user.id} pid={period_id} fpr_w={_fpr_w} waived={reg_fee_waived}", flush=True)
     except Exception:
         reg_fee_waived = False
 
