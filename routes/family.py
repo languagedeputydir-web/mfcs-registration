@@ -1045,6 +1045,18 @@ def submit_registration(period_id):
         if not _is_adult(student):
             minor_count += 1
 
+        # Waiver for adult students
+        waiver_signed = 0
+        waiver_date   = None
+        if _is_adult(student) and (cid or cid2):
+            waiver_val = request.form.get(f'waiver_{sid}')
+            if not waiver_val:
+                conn.close()
+                flash(f'Please agree to the waiver for {student["first_name"]} {student["last_name"]} before submitting.', 'error')
+                return redirect(url_for('family.register_classes', period_id=period_id))
+            waiver_signed = 1
+            waiver_date   = _today_eastern().strftime('%Y-%m-%d')
+
         cur.execute(
             "SELECT id FROM student_record WHERE sid = %s AND pid = %s",
             (sid, period_id)
@@ -1052,15 +1064,18 @@ def submit_registration(period_id):
         existing = cur.fetchone()
         if existing:
             cur.execute(
-                "UPDATE student_record SET lcgrid=%s, ccgrid=%s, ccgrid2=%s WHERE id=%s",
-                (lid, cid, cid2, existing['id'])
+                "UPDATE student_record SET lcgrid=%s, ccgrid=%s, ccgrid2=%s"
+                + (", waiver_signed=%s, waiver_date=%s" if waiver_signed else "") +
+                " WHERE id=%s",
+                ((lid, cid, cid2, waiver_signed, waiver_date, existing['id'])
+                 if waiver_signed else (lid, cid, cid2, existing['id']))
             )
         elif lid or cid or cid2:
             try:
                 cur.execute(
-                    "INSERT INTO student_record (sid, pid, lcgrid, ccgrid, ccgrid2) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (sid, period_id, lid, cid, cid2)
+                    "INSERT INTO student_record (sid, pid, lcgrid, ccgrid, ccgrid2, waiver_signed, waiver_date) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (sid, period_id, lid, cid, cid2, waiver_signed, waiver_date)
                 )
             except Exception as e:
                 if '1062' not in str(e) and 'Duplicate' not in str(e):

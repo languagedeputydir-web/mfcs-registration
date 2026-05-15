@@ -172,6 +172,35 @@
       cultural program fee.
     </div>
 
+    {% if s._is_adult %}
+    <!-- Waiver — shown for adult students who select a class -->
+    <div id="waiver-{{ s.id }}" class="card border-warning mt-3 p-3" style="display:none">
+      <h6 class="fw-600 mb-3">⚠️ Waiver &amp; Release of Liability — {{ s.first_name }} {{ s.last_name }}</h6>
+      <div class="small text-muted mb-3" style="max-height:200px;overflow-y:auto;border:1px solid #eee;padding:10px;border-radius:4px">
+        <p>In consideration of being permitted to participate in activities organized or hosted by Monmouth Fidelity Chinese School (MFCS), I acknowledge, understand, and agree to the following:</p>
+        <ol>
+          <li><strong>Assumption of Risk.</strong> I acknowledge that participation in MFCS activities carries a possibility of physical injury or other harm. I KNOWINGLY AND FREELY ASSUME ALL RISKS, both known and unknown, including those arising from the negligence of the persons released below, and I accept full personal responsibility for my participation.</li>
+          <li><strong>Release of Liability.</strong> I, on behalf of myself, my heirs, assigns, personal representatives, and next of kin, HEREBY RELEASE AND HOLD HARMLESS MONMOUTH FIDELITY CHINESE SCHOOL (MFCS), its teachers, administrators, volunteers, and other employees (collectively, "Releasees") from ANY AND ALL liability for injury, disability, death, or loss or damage to person or property, WHETHER CAUSED BY THE NEGLIGENCE OF THE RELEASEES OR OTHERWISE.</li>
+          <li><strong>Scope.</strong> This Release covers each and every activity conducted at or organized by MFCS.</li>
+          <li><strong>Indemnification.</strong> I agree to indemnify, defend, and hold harmless the Releasees from any claims, damages, or costs (including reasonable attorneys' fees) arising from my participation in MFCS activities.</li>
+          <li><strong>Governing Law.</strong> This Agreement shall be governed by the laws of the State of New Jersey.</li>
+          <li><strong>Severability.</strong> If any provision of this Agreement is found invalid or unenforceable, the remaining provisions shall continue in full force and effect.</li>
+        </ol>
+        <p class="fw-600">I HAVE READ THIS RELEASE OF LIABILITY AND ASSUMPTION OF RISK AGREEMENT IN ITS ENTIRETY, FULLY UNDERSTAND ITS TERMS, ACKNOWLEDGE THAT I AM GIVING UP SUBSTANTIAL LEGAL RIGHTS BY SIGNING IT, AND DO SO FREELY AND VOLUNTARILY WITHOUT INDUCEMENT.</p>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input waiver-check" type="checkbox"
+               name="waiver_{{ s.id }}" id="waiver_check_{{ s.id }}" value="1">
+        <label class="form-check-label small fw-500" for="waiver_check_{{ s.id }}">
+          I, <strong>{{ s.first_name }} {{ s.last_name }}</strong>, have read and agree to the Waiver &amp; Release of Liability above. I understand that this agreement is required for participation in adult programs at MFCS.
+        </label>
+      </div>
+      <div id="waiver-error-{{ s.id }}" class="text-danger small mt-1" style="display:none">
+        ⚠ You must agree to the waiver to enroll in an adult program.
+      </div>
+    </div>
+    {% endif %}
+
   </div><!-- card -->
   {% endfor %}
 
@@ -326,8 +355,50 @@ STUDENTS.forEach(function(s) {
       updateTshirtNotice(s.sid);
     });
   });
-  updateDanceNotice(s.sid);
-  updateTshirtNotice(s.sid);
+  // Waiver: show for adult students when they select any class
+function updateWaiver(sid) {
+  const student = STUDENTS.find(s => s.sid == sid);
+  if (!student || !student.isAdult) return;
+  const cult1 = document.getElementById('cult1_' + sid);
+  const cult2 = document.getElementById('cult2_' + sid);
+  const waiver = document.getElementById('waiver-' + sid);
+  if (!waiver) return;
+  const hasClass = (cult1 && cult1.value && cult1.value !== '0') ||
+                   (cult2 && cult2.value && cult2.value !== '0');
+  waiver.style.display = hasClass ? '' : 'none';
+  if (!hasClass) {
+    const cb = document.getElementById('waiver_check_' + sid);
+    if (cb) cb.checked = false;
+  }
+}
+
+STUDENTS.forEach(function(s) {
+  if (!s.isAdult) return;
+  ['cult1_', 'cult2_'].forEach(function(prefix) {
+    const sel = document.getElementById(prefix + s.sid);
+    if (sel) sel.addEventListener('change', function() { updateWaiver(s.sid); });
+  });
+  updateWaiver(s.sid);
+});
+
+// Validate waivers on submit
+document.querySelector('form').addEventListener('submit', function(e) {
+  let valid = true;
+  STUDENTS.forEach(function(s) {
+    if (!s.isAdult) return;
+    const waiver = document.getElementById('waiver-' + s.sid);
+    if (!waiver || waiver.style.display === 'none') return;
+    const cb = document.getElementById('waiver_check_' + s.sid);
+    const err = document.getElementById('waiver-error-' + s.sid);
+    if (cb && !cb.checked) {
+      valid = false;
+      if (err) err.style.display = '';
+      waiver.scrollIntoView({behavior:'smooth', block:'center'});
+    } else {
+      if (err) err.style.display = 'none';
+    }
+  });
+  if (!valid) e.preventDefault();
 });
 
 function fmt(n){ return '$' + parseFloat(n).toFixed(2); }
