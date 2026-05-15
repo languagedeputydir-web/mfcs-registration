@@ -199,6 +199,7 @@ def dashboard():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur)
     registered_students = 0
+    registered_families = 0
     total_collected = 0.0
     unpaid_balance  = 0.0
     unpaid_families = 0
@@ -209,6 +210,12 @@ def dashboard():
             AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
             (period['id'],))
         registered_students = cur.fetchone()['n']
+        cur.execute("""SELECT COUNT(DISTINCT s.fid) AS n
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_families = cur.fetchone()['n']
         cur.execute("""SELECT COALESCE(SUM(total_paid),0) AS tot
             FROM family_record WHERE pid=%s""",(period['id'],))
         total_collected = float(cur.fetchone()['tot'])
@@ -228,6 +235,7 @@ def dashboard():
     return render_template('admin/dashboard.html',
         period=period,
         registered_students=registered_students,
+        registered_families=registered_families,
         total_collected=total_collected,
         unpaid_balance=unpaid_balance,
         unpaid_families=unpaid_families,
