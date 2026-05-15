@@ -161,6 +161,28 @@
           {% endif %}
           {% endif %}
 
+          {% if r.is_new_family and r.minor_count > 0 %}
+          {% if r.reg_fee_waived %}
+          <form method="post" action="{{ url_for('admin.unwaive_reg_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-warning"
+                    title="Registration fee waived — click to reinstate">
+              Reg Fee Waived
+            </button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin.waive_reg_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning"
+                    title="Waive registration fee for this new family">
+              Waive Reg Fee
+            </button>
+          </form>
+          {% endif %}
+          {% endif %}
+
           {% if r.tuition_override == 'standard' %}
           <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
@@ -230,7 +252,9 @@
                   <td class="text-end fw-500">${{ '%.2f'|format(r.student_subtotal) }}</td>
                 </tr>
                 <tr>
-                  <td colspan="8" class="text-end text-muted small">Registration fee</td>
+                  <td colspan="8" class="text-end text-muted small">Registration fee
+                    {% if r.reg_fee_waived %}<span class="badge bg-warning text-dark ms-1">Waived</span>{% endif %}
+                  </td>
                   <td class="text-end">${{ '%.2f'|format(r.reg_fee) }}</td>
                 </tr>
                 <tr>

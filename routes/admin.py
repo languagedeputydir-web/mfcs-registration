@@ -1179,6 +1179,7 @@ def finance():
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
             fr.late_fee_waived, fr.tuition_override, fr.first_payment_date,
+            fr.reg_fee_waived,
             COUNT(DISTINCT CASE WHEN (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL) THEN sr.sid END) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
@@ -1256,9 +1257,15 @@ def finance():
             minor_count = sum(1 for s in details if not s['is_adult'])
             extra_kids  = max(0, minor_count - 2)
             multi_disc  = extra_kids * disc_per
-            # Adult-only families exempt from reg fee and PA deposit
-            fam_reg_fee = reg_fee if minor_count > 0 else 0.0
-            fam_pa_fee  = pa_fee  if minor_count > 0 else 0.0
+            # Reg fee waived — only for new families
+            _conn_new = get_db_connection()
+            is_new = not _is_returning_family(r['family_id'], int(pid), _conn_new)
+            _conn_new.close()
+            r['is_new_family']   = is_new
+            r['reg_fee_waived']  = bool(r.get('reg_fee_waived', 0))
+            # Apply waiver to reg fee
+            fam_reg_fee = (0.0 if r['reg_fee_waived'] else reg_fee) if minor_count > 0 else 0.0
+            fam_pa_fee  = pa_fee if minor_count > 0 else 0.0
             fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
             total_paid_fam = float(r.get('total_paid') or 0)
             # Check late fee per family with a fresh connection
@@ -1482,7 +1489,28 @@ def new_family():
         return redirect(url_for('admin.family_detail', fid=new_id))
     return render_template('admin/new_family.html')
 
-@admin_bp.route('/payment/waive-late-fee', methods=['POST'])
+@admin_bp.route('/payment/waive-reg-fee', methods=['POST'])
+@roles_required('admin','finance')
+def waive_reg_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET reg_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Registration fee waived.', 'success')
+    return redirect(url_for('admin.finance', pid=pid))
+
+
+@admin_bp.route('/payment/unwaive-reg-fee', methods=['POST'])
+@roles_required('admin','finance')
+def unwaive_reg_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET reg_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Registration fee reinstated.', 'success')
+    return redirect(url_for('admin.finance', pid=pid))
 @roles_required('admin','finance')
 def waive_late_fee():
     fpr_id = request.form.get('fpr_id')
