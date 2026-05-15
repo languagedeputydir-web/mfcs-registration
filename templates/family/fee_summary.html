@@ -78,7 +78,9 @@
     </tr>
     {% if minor_count > 0 %}
     <tr>
-      <td>Registration fee <span class="text-muted small">(non-refundable)</span></td>
+      <td>Registration fee <span class="text-muted small">(non-refundable)</span>
+        {% if reg_fee_waived %}<span class="badge bg-success ms-1">Waived</span>{% endif %}
+      </td>
       <td class="text-end">${{ "%.2f"|format(reg_fee) }}</td>
     </tr>
     <tr>

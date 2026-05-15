@@ -949,6 +949,15 @@ def register_classes(period_id):
     )
     conn2.close()
     late_fee_amount = per_minor_late if charge_late else 0.0
+    # Check reg fee waiver
+    try:
+        cur.execute("SELECT reg_fee_waived FROM family_record WHERE fid=%s AND pid=%s",
+                    (current_user.id, period_id))
+        _fpr_w = cur.fetchone()
+        reg_fee_waived = bool((_fpr_w or {}).get('reg_fee_waived', 0))
+    except Exception:
+        reg_fee_waived = False
+
     return render_template('family/register.html',
                            period=period,
                            students=students,
@@ -963,6 +972,7 @@ def register_classes(period_id):
                            tuition_type=tuition_type,
                            is_late=is_late_flag,
                            late_fee_amount=late_fee_amount,
+                           reg_fee_waived=reg_fee_waived,
                            now_date=_today_eastern().strftime('%Y-%m-%d'))
 
 
@@ -1144,6 +1154,10 @@ def submit_registration(period_id):
     try:
         email_conn = get_db_connection()
         email_cur  = email_conn.cursor(dictionary=True)
+        # Fetch family record for waiver flags
+        email_cur.execute("SELECT * FROM family_record WHERE fid=%s AND pid=%s",
+                          (current_user.id, period_id))
+        fpr = email_cur.fetchone() or {}
         email_cur.execute("""
             SELECT sr.*, s.first_name, s.last_name, s.birthday,
                    s.is_adult, s.mfcs_affiliation,
@@ -1242,7 +1256,8 @@ def submit_registration(period_id):
         discount_per = float(period.get('discount') or 0)
         extra_kids   = max(0, minor_cnt - 2)
         disc_amt     = extra_kids * discount_per
-        reg_fee_email = float(period.get('registration_fee') or 0) if minor_cnt > 0 else 0.0
+        _email_reg_waived = bool((fpr or {}).get('reg_fee_waived', 0))
+        reg_fee_email = float(period.get('registration_fee') or 0) if (minor_cnt > 0 and not _email_reg_waived) else 0.0
         pa_dep_email  = float(period.get('pa_assignment_deposit') or 0) if minor_cnt > 0 else 0.0
 
         text_summary = ''
@@ -1455,8 +1470,9 @@ def fee_summary(period_id):
                      'is_adult':    adult})
 
     # Multi-kid discount
-    # Apply adult-only exemption to reg fee and PA deposit
-    reg_fee  = float(period.get('registration_fee') or 0) if (period and minor_count > 0) else 0.0
+    # Apply adult-only exemption and reg fee waiver
+    reg_fee_waived = bool((fpr or {}).get('reg_fee_waived', 0))
+    reg_fee  = float(period.get('registration_fee') or 0) if (period and minor_count > 0 and not reg_fee_waived) else 0.0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if (period and minor_count > 0) else 0.0
     discount_per = float(period.get('discount') or 0) if period else 0
     extra_kids   = max(0, minor_count - 2)
@@ -1496,6 +1512,7 @@ def fee_summary(period_id):
                            student_subtotal=student_subtotal,
                            reg_fee=reg_fee,
                            pa_fee=pa_fee,
+                           reg_fee_waived=reg_fee_waived,
                            late_fee=late_fee,
                            late_fee_per_minor=per_minor_late,
                            minor_count=minor_count,

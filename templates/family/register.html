@@ -305,7 +305,7 @@ const TUITION  = {{ eff_tuition|default(period.tuition) or 0 }};
 {% if tuition_type == 'grandfathered' %}
 // Grandfathered tuition rate applied for this family
 {% endif %}
-const REG_FEE  = {{ period.registration_fee or 0 }};
+const REG_FEE  = {{ 0 if reg_fee_waived else (period.registration_fee or 0) }};
 const PA_DEP   = {{ period.pa_assignment_deposit or 0 }};
 const DISCOUNT = {{ period.discount|float if period.discount else 0 }};
 const LATE_FEE = {{ late_fee_amount }};
