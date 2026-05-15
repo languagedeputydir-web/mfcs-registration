@@ -56,6 +56,16 @@
       <div class="small text-muted">Families</div>
     </div>
   </div>
+  <div class="col-4 col-md-2">
+    <div class="card p-2 text-center">
+      <div class="fw-600 fs-5" style="color:var(--mfcs-red)">
+        {% set ns = namespace(total=0) %}
+        {% for r in registrations %}{% set ns.total = ns.total + (r.student_details|length) %}{% endfor %}
+        {{ ns.total }}
+      </div>
+      <div class="small text-muted">Students</div>
+    </div>
+  </div>
   <div class="col-4 col-md-3">
     <div class="card p-2 text-center">
       <div class="fw-600 fs-5">${{ "%.2f"|format(total_due_sum) }}</div>

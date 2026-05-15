@@ -2055,7 +2055,9 @@ def students():
         lang_classes = cur.fetchall()
         cur.execute("SELECT id,name FROM class_group_record WHERE pid=%s AND type='culture' ORDER BY name",(pid,))
         cult_classes = cur.fetchall()
-        where = ["sr.pid=%s"]; params = [pid]
+        where = ["sr.pid=%s",
+                 "(sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)"]
+        params = [pid]
         if lang_filter: where.append("sr.lcgrid=%s"); params.append(int(lang_filter))
         if cult_filter: where.append("(sr.ccgrid=%s OR sr.ccgrid2=%s)"); params.extend([int(cult_filter),int(cult_filter)])
         if name_filter:
