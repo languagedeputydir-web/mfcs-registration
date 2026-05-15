@@ -317,7 +317,7 @@ const CULT_DISC = { {% for c in cult_classes_all %}"{{c.id}}":{{c.discount or 0}
 const CULT_NAMES = { {% for c in cult_classes_all %}"{{c.id}}":"{{c.name}}",{% endfor %} };
 const LANG_NAMES = { {% for c in lang_classes %}"{{c.id}}":"{{c.name}}",{% endfor %} };
 
-// Dance class notice
+// Dance/tshirt/waiver notices
 const DANCE_KEYWORDS = ['folk dance', 'traditional', 'pop dance'];
 const TSHIRT_KEYWORDS = ['kung fu', 'yo-yo', 'yoyo', 'yo yo'];
 
@@ -347,17 +347,8 @@ function updateTshirtNotice(sid) {
   const hasTshirt = isTshirtClass(cult1 && cult1.value) || isTshirtClass(cult2 && cult2.value);
   notice.style.display = hasTshirt ? '' : 'none';
 }
-STUDENTS.forEach(function(s) {
-  ['cult1_', 'cult2_'].forEach(function(prefix) {
-    const sel = document.getElementById(prefix + s.sid);
-    if (sel) sel.addEventListener('change', function() {
-      updateDanceNotice(s.sid);
-      updateTshirtNotice(s.sid);
-    });
-  });
-  // Waiver: show for adult students when they select any class
 function updateWaiver(sid) {
-  const student = STUDENTS.find(s => s.sid == sid);
+  const student = STUDENTS.find(function(s) { return s.sid == sid; });
   if (!student || !student.isAdult) return;
   const cult1 = document.getElementById('cult1_' + sid);
   const cult2 = document.getElementById('cult2_' + sid);
@@ -373,11 +364,16 @@ function updateWaiver(sid) {
 }
 
 STUDENTS.forEach(function(s) {
-  if (!s.isAdult) return;
   ['cult1_', 'cult2_'].forEach(function(prefix) {
     const sel = document.getElementById(prefix + s.sid);
-    if (sel) sel.addEventListener('change', function() { updateWaiver(s.sid); });
+    if (sel) sel.addEventListener('change', function() {
+      updateDanceNotice(s.sid);
+      updateTshirtNotice(s.sid);
+      updateWaiver(s.sid);
+    });
   });
+  updateDanceNotice(s.sid);
+  updateTshirtNotice(s.sid);
   updateWaiver(s.sid);
 });
 
