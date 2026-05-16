@@ -169,7 +169,7 @@
   <div class="small">
     <strong>How fees are calculated:</strong><br>
     • Students <strong>under 18</strong>:
-      Tuition (<strong>${{ eff_tuition or (period.tuition or 0)|currency }}</strong>
+      Tuition (<strong>${{ (eff_tuition or period.tuition or 0)|currency }}</strong>
       {% if 'grandfathered' in tuition_type %}
       <span class="badge bg-success ms-1">Returning family rate</span>
       {% endif %}
