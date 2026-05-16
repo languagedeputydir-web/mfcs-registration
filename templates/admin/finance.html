@@ -116,8 +116,8 @@
         </td>
         <td class="text-muted">{{ r.primary_email }}</td>
         <td class="text-center">{{ r.student_count }}</td>
-        <td class="text-end">${{ r.total_due or 0|currency }}</td>
-        <td class="text-end">${{ r.total_paid or 0|currency }}</td>
+        <td class="text-end">${{ (r.total_due or 0)|currency }}</td>
+        <td class="text-end">${{ (r.total_paid or 0)|currency }}</td>
         <td class="text-end {{ 'text-danger fw-600' if r.balance > 0.01 else 'text-success' }}">
           ${{ r.balance|currency }}
         </td>

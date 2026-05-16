@@ -96,7 +96,7 @@
         <td class="text-end small">
           {% if f.total_due %}
           ${{ f.total_due|currency }} /
-          ${{ f.total_paid or 0|currency }}
+          ${{ (f.total_paid or 0)|currency }}
           {% set balance = (f.total_due or 0)|float - (f.total_paid or 0)|float - (f.adjustment or 0)|float %}
           {% if balance > 0.01 %}
           <span class="text-danger">(owe ${{ balance|currency }})</span>

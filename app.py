@@ -18,6 +18,14 @@ def create_app():
     login_manager.login_view = 'family.login'
     login_manager.login_message = 'Please log in to continue.'
 
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        from flask import request, redirect, url_for
+        # If trying to access admin pages, redirect to admin login
+        if request.path.startswith('/admin'):
+            return redirect(url_for('admin.login'))
+        return redirect(url_for('family.login'))
+
     @login_manager.user_loader
     def load_user(user_id):
         """
@@ -58,11 +66,11 @@ def create_app():
     # ── Custom Jinja filters ───────────────────────────────────────────────────
     @app.template_filter('currency')
     def currency_filter(value):
-        """Format as $X,XXX (no decimal, with thousands separator)."""
+        """Format as X,XXX (no decimal, with thousands separator). Templates add $ prefix."""
         try:
-            return '${:,.0f}'.format(float(value or 0))
+            return '{:,.0f}'.format(float(value or 0))
         except (ValueError, TypeError):
-            return '$0'
+            return '0'
 
     # Redirect root URL to family login
     from flask import redirect, url_for

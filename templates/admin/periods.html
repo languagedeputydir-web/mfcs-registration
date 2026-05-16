@@ -24,13 +24,13 @@
       {% for p in periods %}
       <tr>
         <td class="fw-500">{{ p.name }}</td>
-        <td class="text-end">${{ "%.2f"|format(p.tuition or 0) }}</td>
-        <td class="text-end">${{ "%.2f"|format(p.registration_fee or 0) }}</td>
-        <td class="text-end">${{ "%.2f"|format(p.pa_assignment_deposit or 0) }}</td>
-        <td class="text-end">${{ "%.2f"|format(p.late_fee or 0) }}</td>
+        <td class="text-end">${{ (p.tuition or 0)|currency }}</td>
+        <td class="text-end">${{ (p.registration_fee or 0)|currency }}</td>
+        <td class="text-end">${{ (p.pa_assignment_deposit or 0)|currency }}</td>
+        <td class="text-end">${{ (p.late_fee or 0)|currency }}</td>
         <td class="text-end">
           {% if p.discount and p.discount > 0 %}
-          ${{ "%.2f"|format(p.discount) }} <span class="text-muted small">/kid</span>
+          ${{ p.discount|currency }} <span class="text-muted small">/kid</span>
           {% else %}
           <span class="text-muted">—</span>
           {% endif %}

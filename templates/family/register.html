@@ -24,9 +24,9 @@
     <li>Language program: included in tuition — no extra charge</li>
     <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
     {% if not reg_fee_waived %}
-    <li id="reg-fee-info">Registration fee (per family): <strong>${{ period.registration_fee or 0|currency }}</strong></li>
+    <li id="reg-fee-info">Registration fee (per family): <strong>${{ (period.registration_fee or 0)|currency }}</strong></li>
     {% endif %}
-    <li id="pa-fee-info">PA Assignment Duty deposit — refundable (per family): <strong>${{ period.pa_assignment_deposit or 0|currency }}</strong></li>
+    <li id="pa-fee-info">PA Assignment Duty deposit — refundable (per family): <strong>${{ (period.pa_assignment_deposit or 0)|currency }}</strong></li>
     {% if period.discount and period.discount|float > 0 %}
     <li>Multi-child discount: families with <strong>3 or more children under 18</strong>
       enrolled receive a <strong>${{ period.discount|float|currency }} tuition
@@ -213,10 +213,10 @@
       {% if reg_fee_waived %}
       <span class="text-success"><strong>Registration fee: Waived</strong></span>
       {% else %}
-      <strong>Registration fee ${{ period.registration_fee or 0|currency }}</strong>
+      <strong>Registration fee ${{ (period.registration_fee or 0)|currency }}</strong>
       {% endif %}
       &nbsp;+&nbsp;
-      <strong>PA Assignment Duty deposit ${{ period.pa_assignment_deposit or 0|currency }}</strong>
+      <strong>PA Assignment Duty deposit ${{ (period.pa_assignment_deposit or 0)|currency }}</strong>
       <span class="text-muted">(PA deposit is refundable upon completion of duty)</span>
     </div>
   </div>
@@ -249,12 +249,12 @@
         {% if not reg_fee_waived %}
         <tr class="border-top" id="reg-fee-row">
           <td colspan="3" class="text-muted small">Registration fee (per family)</td>
-          <td class="text-end text-muted small">${{ period.registration_fee or 0|currency }}</td>
+          <td class="text-end text-muted small">${{ (period.registration_fee or 0)|currency }}</td>
         </tr>
         {% endif %}
         <tr id="pa-fee-row">
           <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
-          <td class="text-end text-muted small">${{ period.pa_assignment_deposit or 0|currency }}</td>
+          <td class="text-end text-muted small">${{ (period.pa_assignment_deposit or 0)|currency }}</td>
         </tr>
         {% if is_late %}
         <tr class="text-danger">
