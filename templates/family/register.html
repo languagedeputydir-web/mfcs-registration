@@ -14,7 +14,7 @@
   <strong>Fee information for {{ period.name }}:</strong>
   <ul class="mb-0 mt-1">
     <li>Students <strong>under 18</strong>: Tuition
-      <strong>${{ "%.2f"|format(eff_tuition|default(period.tuition) or 0) }}</strong>
+      <strong>${{ (eff_tuition|default(period.tuition) or 0)|currency }}</strong>
       + cultural program fee(s)
       {% if tuition_type == 'grandfathered' %}
       <span class="badge bg-success ms-1">Returning family rate</span>
@@ -24,16 +24,16 @@
     <li>Language program: included in tuition — no extra charge</li>
     <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
     {% if not reg_fee_waived %}
-    <li id="reg-fee-info">Registration fee (per family): <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
+    <li id="reg-fee-info">Registration fee (per family): <strong>${{ period.registration_fee or 0|currency }}</strong></li>
     {% endif %}
-    <li id="pa-fee-info">PA Assignment Duty deposit — refundable (per family): <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+    <li id="pa-fee-info">PA Assignment Duty deposit — refundable (per family): <strong>${{ period.pa_assignment_deposit or 0|currency }}</strong></li>
     {% if period.discount and period.discount|float > 0 %}
     <li>Multi-child discount: families with <strong>3 or more children under 18</strong>
-      enrolled receive a <strong>${{ "%.2f"|format(period.discount|float) }} tuition
+      enrolled receive a <strong>${{ period.discount|float|currency }} tuition
       discount per child</strong> for the 3rd child and beyond</li>
     {% endif %}
     {% if is_late %}
-    <li class="text-danger"><strong>Late payment fee: ${{ "%.2f"|format(late_fee_amount) }} per minor student</strong>
+    <li class="text-danger"><strong>Late payment fee: ${{ late_fee_amount|currency }} per minor student</strong>
       — the payment deadline has passed</li>
     {% endif %}
   </ul>
@@ -115,9 +115,9 @@
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
               {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
-                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+                — ${{ [cc.fee|float - cc.discount|float, 0]|max|currency }} <small>(after discount)</small>
               {% else %}
-                — ${{ "%.0f"|format(cc.fee|float) }}
+                — ${{ cc.fee|float|currency }}
               {% endif %}
             {% endif %}
           </option>
@@ -144,9 +144,9 @@
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
               {% if s._is_adult and s.mfcs_affiliation == 'Y' and cc.discount and cc.discount|float > 0 %}
-                — ${{ "%.0f"|format([cc.fee|float - cc.discount|float, 0]|max) }} <small>(after discount)</small>
+                — ${{ [cc.fee|float - cc.discount|float, 0]|max|currency }} <small>(after discount)</small>
               {% else %}
-                — ${{ "%.0f"|format(cc.fee|float) }}
+                — ${{ cc.fee|float|currency }}
               {% endif %}
             {% endif %}
           </option>
@@ -213,10 +213,10 @@
       {% if reg_fee_waived %}
       <span class="text-success"><strong>Registration fee: Waived</strong></span>
       {% else %}
-      <strong>Registration fee ${{ "%.2f"|format(period.registration_fee or 0) }}</strong>
+      <strong>Registration fee ${{ period.registration_fee or 0|currency }}</strong>
       {% endif %}
       &nbsp;+&nbsp;
-      <strong>PA Assignment Duty deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong>
+      <strong>PA Assignment Duty deposit ${{ period.pa_assignment_deposit or 0|currency }}</strong>
       <span class="text-muted">(PA deposit is refundable upon completion of duty)</span>
     </div>
   </div>
@@ -249,19 +249,19 @@
         {% if not reg_fee_waived %}
         <tr class="border-top" id="reg-fee-row">
           <td colspan="3" class="text-muted small">Registration fee (per family)</td>
-          <td class="text-end text-muted small">${{ "%.2f"|format(period.registration_fee or 0) }}</td>
+          <td class="text-end text-muted small">${{ period.registration_fee or 0|currency }}</td>
         </tr>
         {% endif %}
         <tr id="pa-fee-row">
           <td colspan="3" class="text-muted small">PA Assignment Duty deposit — refundable (per family)</td>
-          <td class="text-end text-muted small">${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</td>
+          <td class="text-end text-muted small">${{ period.pa_assignment_deposit or 0|currency }}</td>
         </tr>
         {% if is_late %}
         <tr class="text-danger">
           <td colspan="3" class="small">Late payment fee
             <span class="text-muted small" id="late-fee-breakdown"></span>
           </td>
-          <td class="text-end small" id="late-fee-amount">${{ "%.2f"|format(late_fee_amount) }}</td>
+          <td class="text-end small" id="late-fee-amount">${{ late_fee_amount|currency }}</td>
         </tr>
         {% endif %}
         <tr id="discount-row" style="display:none">
@@ -405,7 +405,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
   if (!valid) e.preventDefault();
 });
 
-function fmt(n){ return '$' + parseFloat(n).toFixed(2); }
+function fmt(n){ return '$' + Math.round(parseFloat(n)).toLocaleString('en-US'); }
 
 function calcFees(){
   let sub = 0, minors = 0, rows = '', hasAny = false;

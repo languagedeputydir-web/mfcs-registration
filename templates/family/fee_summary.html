@@ -41,7 +41,7 @@
         <td class="small">{{ r.cult_class_name or '—' }}</td>
         <td class="small">{{ r.cult_class2_name or '—' }}</td>
         <td class="small text-muted">{{ r.fee_note }}</td>
-        <td class="text-end fw-500">${{ "%.2f"|format(r.student_fee) }}</td>
+        <td class="text-end fw-500">${{ r.student_fee|currency }}</td>
       </tr>
       {% else %}
       <tr>
@@ -60,7 +60,7 @@
     <tfoot>
       <tr class="table-light">
         <td colspan="5" class="text-end text-muted small">Student subtotal</td>
-        <td class="text-end">${{ "%.2f"|format(student_subtotal) }}</td>
+        <td class="text-end">${{ student_subtotal|currency }}</td>
       </tr>
     </tfoot>
     {% endif %}
@@ -74,39 +74,39 @@
   <table class="table table-sm mb-0">
     <tr>
       <td>Student fees subtotal</td>
-      <td class="text-end">${{ "%.2f"|format(student_subtotal) }}</td>
+      <td class="text-end">${{ student_subtotal|currency }}</td>
     </tr>
     {% if minor_count > 0 %}
     <tr>
       <td>Registration fee <span class="text-muted small">(non-refundable)</span>
         {% if reg_fee_waived %}<span class="badge bg-success ms-1">Waived</span>{% endif %}
       </td>
-      <td class="text-end">${{ "%.2f"|format(reg_fee) }}</td>
+      <td class="text-end">${{ reg_fee|currency }}</td>
     </tr>
     <tr>
       <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
-      <td class="text-end">${{ "%.2f"|format(pa_fee) }}</td>
+      <td class="text-end">${{ pa_fee|currency }}</td>
     </tr>
     {% endif %}
     {% if late_fee %}
     <tr class="text-danger">
       <td>Late payment fee
-        <span class="text-muted small">({{ minor_count }} minor{{ 's' if minor_count > 1 }} × ${{ "%.2f"|format(late_fee_per_minor) }})</span>
+        <span class="text-muted small">({{ minor_count }} minor{{ 's' if minor_count > 1 }} × ${{ late_fee_per_minor|currency }})</span>
       </td>
-      <td class="text-end">${{ "%.2f"|format(late_fee) }}</td>
+      <td class="text-end">${{ late_fee|currency }}</td>
     </tr>
     {% endif %}
     {% if multi_disc and multi_disc > 0 %}
     <tr class="text-success">
       <td>Multi-child discount
-        <span class="text-muted small">({{ extra_kids }} child{{ 'ren' if extra_kids > 1 }} × ${{ "%.2f"|format(discount_per) }})</span>
+        <span class="text-muted small">({{ extra_kids }} child{{ 'ren' if extra_kids > 1 }} × ${{ discount_per|currency }})</span>
       </td>
-      <td class="text-end">-${{ "%.2f"|format(multi_disc) }}</td>
+      <td class="text-end">-${{ multi_disc|currency }}</td>
     </tr>
     {% endif %}
     <tr class="table-dark">
       <td class="fw-600">Total Due</td>
-      <td class="text-end fw-600">${{ "%.2f"|format(grand_total) }}</td>
+      <td class="text-end fw-600">${{ grand_total|currency }}</td>
     </tr>
   </table>
 </div>
@@ -119,16 +119,16 @@
   <table class="table table-sm mb-0">
     <tr>
       <td>Total due</td>
-      <td class="text-end">${{ "%.2f"|format(fpr.total_due or 0) }}</td>
+      <td class="text-end">${{ fpr.total_due or 0|currency }}</td>
     </tr>
     <tr>
       <td>Total paid</td>
-      <td class="text-end">${{ "%.2f"|format(fpr.total_paid or 0) }}</td>
+      <td class="text-end">${{ fpr.total_paid or 0|currency }}</td>
     </tr>
     {% if fpr.adjustment %}
     <tr>
       <td>Adjustment</td>
-      <td class="text-end">${{ "%.2f"|format(fpr.adjustment) }}</td>
+      <td class="text-end">${{ fpr.adjustment|currency }}</td>
     </tr>
     {% endif %}
     {% set balance = (fpr.total_due or 0)|float
@@ -136,7 +136,7 @@
                    - (fpr.adjustment or 0)|float %}
     <tr class="{{ 'table-danger' if balance > 0.01 else 'table-success' }}">
       <td class="fw-600">Remaining Balance</td>
-      <td class="text-end fw-600">${{ "%.2f"|format(balance) }}</td>
+      <td class="text-end fw-600">${{ balance|currency }}</td>
     </tr>
   </table>
   {% if fpr.description and fpr.description != '?' %}
@@ -169,7 +169,7 @@
   <div class="small">
     <strong>How fees are calculated:</strong><br>
     • Students <strong>under 18</strong>:
-      Tuition (<strong>${{ "%.2f"|format(eff_tuition or period.tuition or 0) }}</strong>
+      Tuition (<strong>${{ eff_tuition or period.tuition or 0|currency }}</strong>
       {% if 'grandfathered' in tuition_type %}
       <span class="badge bg-success ms-1">Returning family rate</span>
       {% endif %}
@@ -181,7 +181,7 @@
       Up to 2 cultural programs per student
     {% if period and period.grandfathered_tuition and period.grandfathered_deadline and period.grandfathered_deadline|string != '2999-01-01' and 'grandfathered' in tuition_type %}
     <hr class="my-2">
-    • The returning family tuition rate of <strong>${{ "%.2f"|format(period.grandfathered_tuition) }}</strong>
+    • The returning family tuition rate of <strong>${{ period.grandfathered_tuition|currency }}</strong>
       applies only to returning families whose registration is submitted and payment is
       received by <strong>{{ period.grandfathered_deadline }}</strong>.
       Payments received after this date will be assessed at the standard tuition rate.
@@ -189,7 +189,7 @@
     {% if period and period.late_fee and period.late_fee|float > 0 and period.deadline and period.deadline|string != '2999-01-01' %}
     {% if not (tuition_type and 'new family' in tuition_type) %}
     <hr class="my-2">
-    • A <strong>${{ "%.0f"|format(period.late_fee) }} late fee per child</strong>
+    • A <strong>${{ period.late_fee|currency }} late fee per child</strong>
       applies to returning families whose payment is received after
       <strong>{{ period.deadline }}</strong>.
     {% endif %}

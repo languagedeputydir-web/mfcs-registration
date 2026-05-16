@@ -55,6 +55,15 @@ def create_app():
     app.register_blueprint(family_bp)
     app.register_blueprint(admin_bp, url_prefix='/admin')
 
+    # ── Custom Jinja filters ───────────────────────────────────────────────────
+    @app.template_filter('currency')
+    def currency_filter(value):
+        """Format as $X,XXX (no decimal, with thousands separator)."""
+        try:
+            return '${:,.0f}'.format(float(value or 0))
+        except (ValueError, TypeError):
+            return '$0'
+
     # Redirect root URL to family login
     from flask import redirect, url_for
     @app.route('/')

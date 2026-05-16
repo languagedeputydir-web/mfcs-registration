@@ -1,269 +1,103 @@
 {% extends "base.html" %}
-{% block title %}Admin Home — Monmouth Fidelity Chinese School{% endblock %}
-{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
-{% block content %}
+{% block title %}Dashboard — MFCS{% endblock %}
 
-<!-- Welcome bar -->
-<div class="mb-4">
-  <h2 class="mb-0">Welcome, {{ current_user.display_name or current_user.username }}</h2>
-  <div class="text-muted small">
-    Role: <strong>{{ current_user.role | capitalize }}</strong>
+{% block navbar %}
+{% include 'family/_navbar.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h2 class="mb-0">Welcome, {{ current_user.first_name_0 or current_user.display_name }}!</h2>
     {% if period %}
-    &nbsp;·&nbsp; Current school year: <strong>{{ period.name }}</strong>
+    <p class="text-muted mb-0 small">Current school year: <strong>{{ period.name }}</strong></p>
     {% endif %}
   </div>
-</div>
-
-{% if not period %}
-<div class="alert alert-warning mb-4">No active school year found. <a href="{{ url_for('admin.new_period') }}">Create one →</a></div>
-{% else %}
-
-<!-- Stats strip — all roles see student count; money cards finance/admin only -->
-<div class="row g-2 mb-4">
-  <div class="col-6 col-sm-3">
-    <div class="card p-3 text-center h-100">
-      <div class="fw-700" style="font-size:1.8rem;color:var(--mfcs-red)">{{ registered_students }}</div>
-      <div class="small text-muted">Registered<br><span style="font-size:.7rem">Students</span></div>
-    </div>
-  </div>
-  <div class="col-6 col-sm-3">
-    <div class="card p-3 text-center h-100">
-      <div class="fw-700" style="font-size:1.8rem;color:var(--mfcs-red)">{{ registered_families }}</div>
-      <div class="small text-muted">Registered<br><span style="font-size:.7rem">Families</span></div>
-    </div>
-  </div>
-  {% if current_user.is_finance %}
-  <div class="col-6 col-sm-3">
-    <div class="card p-3 text-center h-100">
-      <div class="fw-700 text-success" style="font-size:1.8rem">${{ "%.0f"|format(total_collected) }}</div>
-      <div class="small text-muted">Payment<br><span style="font-size:.7rem">Collected</span></div>
-    </div>
-  </div>
-  <div class="col-6 col-sm-3">
-    <a href="{{ url_for('admin.finance', pid=period.id) }}" class="text-decoration-none">
-    <div class="card p-3 text-center h-100 {{ 'border-danger' if unpaid_families > 0 }}">
-      <div class="fw-700" style="font-size:1.8rem;color:{{ '#c0392b' if unpaid_families > 0 else '#27ae60' }}">
-        ${{ "%.0f"|format(unpaid_balance) }}
-      </div>
-      <div class="small text-muted">Unpaid<br>
-        <span style="font-size:.7rem">
-          {{ unpaid_families }} famil{{ 'y' if unpaid_families == 1 else 'ies' }}
-        </span>
-      </div>
-    </div>
-    </a>
-  </div>
-  <div class="col-6 col-sm-3">
-    <a href="{{ url_for('admin.finance', pid=period.id) }}" class="text-decoration-none">
-    <div class="card p-3 text-center h-100 {{ 'border-warning' if fee_changed_count > 0 }}">
-      <div class="fw-700" style="font-size:1.8rem;color:{{ '#e67e22' if fee_changed_count > 0 else '#27ae60' }}">
-        {{ fee_changed_count }}
-      </div>
-      <div class="small text-muted">Fee Changes<br><span style="font-size:.7rem">Need Review</span></div>
-    </div>
-    </a>
-  </div>
+  {% if period %}
+  <a href="{{ url_for('family.register_classes', period_id=period.id) }}"
+     class="btn btn-family">
+    {{ 'Update Registration' if fpr else 'Register for Classes' }}
+  </a>
   {% endif %}
 </div>
 
-<!-- Current year info bar -->
-<div class="card p-3 mb-4 d-flex flex-row justify-content-between align-items-center flex-wrap gap-2"
-     style="background:#fafafa">
-  <div class="small text-muted">
-    <strong>{{ period.name }}</strong>
-    {% if current_user.is_finance %}
-    &nbsp;·&nbsp; Tuition ${{ "%.2f"|format(period.tuition or 0) }}
-    &nbsp;·&nbsp; Reg fee ${{ "%.2f"|format(period.registration_fee or 0) }}
-    &nbsp;·&nbsp; PA deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}
-    {% endif %}
-    {% if period.deadline and period.deadline|string != '2999-01-01' %}
-    &nbsp;·&nbsp; Deadline {{ period.deadline }}
+<!-- Registration status banner -->
+{% if period and fpr %}
+<div class="alert
+  {% if fpr.reg_status == 'Complete Registration' %}alert-success{% else %}alert-warning{% endif %}
+  d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <strong>{{ fpr.reg_status }}</strong> for {{ period.name }}
+    &nbsp;·&nbsp;
+    Due: <strong>${{ fpr.total_due or 0|currency }}</strong>
+    &nbsp;·&nbsp;
+    Paid: <strong>${{ fpr.total_paid or 0|currency }}</strong>
+    {% set balance = (fpr.total_due or 0) - (fpr.total_paid or 0) - (fpr.adjustment or 0) %}
+    {% if balance > 0.01 %}
+      &nbsp;·&nbsp; <span class="text-danger fw-600">Balance: ${{ balance|currency }}</span>
     {% endif %}
   </div>
+  <a href="{{ url_for('family.fee_summary', period_id=period.id) }}"
+     class="btn btn-sm btn-outline-secondary">View fees</a>
 </div>
-
+{% elif period %}
+<div class="alert alert-info mb-4">
+  You have not yet registered for <strong>{{ period.name }}</strong>.
+  <a href="{{ url_for('family.register_classes', period_id=period.id) }}"
+     class="alert-link">Register now →</a>
+</div>
 {% endif %}
 
-<!-- ── Main menu ── -->
-<h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">
-  Main Menu
-</h6>
+<!-- Students -->
+<h5 class="mb-3">Your Students ({{ students|length }})</h5>
 
-<div class="row g-3">
-
-  {% if current_user.is_admin %}
-  <!-- School Years -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid var(--mfcs-red)">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">📅</span>
-        <h5 class="mb-0">School Years</h5>
+{% if not students %}
+<div class="card p-4 text-muted text-center">
+  No students are on file for your account. Please contact the school office.
+</div>
+{% else %}
+<div class="row g-3 mb-4">
+  {% for s in students %}
+  {% set reg = registrations | selectattr('sid', 'equalto', s.id) | list | first %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card p-3 h-100">
+      <div class="fw-600 mb-1">{{ s.last_name }}, {{ s.first_name }}
+        {% if s.chinese_name and s.chinese_name != '?' %}
+        <span class="text-muted small ms-1">{{ s.chinese_name }}</span>
+        {% endif %}
       </div>
-      <p class="small text-muted mb-3">
-        Set up school years and manage tuition, registration fees,
-        PA duty deposit, late fees and deadlines.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.periods') }}" class="btn btn-admin btn-sm">View All</a>
-        <a href="{{ url_for('admin.new_period') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
+      {% if s.birthday and s.birthday|string != '2999-01-01' %}
+      <div class="small text-muted mb-2">Born: {{ s.birthday }}</div>
+      {% endif %}
+      {% if reg %}
+      <div class="small mt-auto">
+        <div>
+          📚 {{ reg.lang_class_name or '<em>No language class</em>' | safe }}
+        </div>
+        <div>
+          🎭 {{ reg.cult_class_name or '<em>No culture class</em>' | safe }}
+        </div>
       </div>
+      {% else %}
+      <div class="small text-muted mt-auto">Not yet registered for {{ period.name if period else 'current year' }}</div>
+      {% endif %}
     </div>
   </div>
+  {% endfor %}
+</div>
+{% endif %}
 
-  <!-- User Management -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid var(--mfcs-red)">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">👤</span>
-        <h5 class="mb-0">Admin Users</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Add and manage staff accounts with roles:
-        Finance, Language, Culture, or full Admin access.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.users') }}" class="btn btn-admin btn-sm">View All</a>
-        <a href="{{ url_for('admin.new_user') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
+<!-- Quick links -->
+<div class="d-flex gap-2 flex-wrap mt-2">
+  <a href="{{ url_for('family.students') }}" class="btn btn-outline-secondary btn-sm">
+    Manage Students
+  </a>
+  <a href="{{ url_for('family.profile') }}" class="btn btn-outline-secondary btn-sm">
+    Edit Profile
+  </a>
+  {% if period and fpr %}
+  <a href="{{ url_for('family.fee_summary', period_id=period.id) }}"
+     class="btn btn-outline-secondary btn-sm">Fee summary</a>
   {% endif %}
-
-  {% if current_user.is_language %}
-  <!-- Language Classes -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #2980b9">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">📚</span>
-        <h5 class="mb-0">Language Classes</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Add and maintain language class offerings for each school year.
-        Language classes are covered by tuition.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.language_classes') }}" class="btn btn-sm"
-           style="background:#2980b9;color:#fff">View / Edit</a>
-        <a href="{{ url_for('admin.new_language_class') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if current_user.is_culture %}
-  <!-- Culture Classes -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #8e44ad">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">🎭</span>
-        <h5 class="mb-0">Culture Classes</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Add and maintain culture class offerings and fees for each school year.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.culture_classes') }}" class="btn btn-sm"
-           style="background:#8e44ad;color:#fff">View / Edit</a>
-        <a href="{{ url_for('admin.new_culture_class') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if current_user.is_finance %}
-  <!-- Finance -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #27ae60">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">💰</span>
-        <h5 class="mb-0">Finance</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Track payments, mark complete registrations, filter by status,
-        and export reports.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.finance') }}" class="btn btn-sm"
-           style="background:#27ae60;color:#fff">Open Finance</a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Families -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #27ae60">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">👨‍👩‍👧</span>
-        <h5 class="mb-0">Families</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Search and view family accounts, registration history,
-        and payment details.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.families') }}" class="btn btn-sm"
-           style="background:#27ae60;color:#fff">View All</a>
-        <a href="{{ url_for('admin.new_family') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if current_user.is_language or current_user.is_culture %}
-  <!-- Staff -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #7f8c8d">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">👩‍🏫</span>
-        <h5 class="mb-0">Staff</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Manage teachers and TAs per school year.
-        Assign staff to classes.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.staff_list') }}" class="btn btn-outline-secondary btn-sm">View / Edit</a>
-        <a href="{{ url_for('admin.new_teacher') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if current_user.is_admin or current_user.is_language or current_user.is_culture %}
-  <!-- Facilities -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #7f8c8d">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">🏫</span>
-        <h5 class="mb-0">Facilities</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        Manage classrooms and facilities available per school year.
-        Assign rooms to classes.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.facility_list') }}" class="btn btn-outline-secondary btn-sm">View / Edit</a>
-        <a href="{{ url_for('admin.new_facility') }}" class="btn btn-outline-secondary btn-sm">+ Add</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Students (all roles) -->
-  <div class="col-12 col-md-6 col-lg-4">
-    <div class="card h-100 p-4" style="border-left:4px solid #7f8c8d">
-      <div class="d-flex align-items-center gap-3 mb-2">
-        <span style="font-size:1.8rem">🎓</span>
-        <h5 class="mb-0">Students</h5>
-      </div>
-      <p class="small text-muted mb-3">
-        View all enrolled students and their current year class assignments.
-      </p>
-      <div class="mt-auto d-flex gap-2">
-        <a href="{{ url_for('admin.students') }}" class="btn btn-outline-secondary btn-sm">View All</a>
-      </div>
-    </div>
-  </div>
-
-</div><!-- end row -->
+</div>
 {% endblock %}
