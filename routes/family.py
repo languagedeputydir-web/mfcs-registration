@@ -887,10 +887,21 @@ def register_classes(period_id):
 
     # Per-student culture class lists
     cult_classes_all          = all_cult_classes  # for JS fee lookup only
-    cult_classes_adult        = [c for c in all_cult_classes if c.get('audience') in ('adult', 'both') or (c.get('audience') is None and c.get('adult_only', 0))]
-    cult_classes_adult_second = [c for c in cult_classes_adult if c.get('allow_as_second', 1)]
-    cult_classes_minor        = [c for c in all_cult_classes if c.get('audience') in ('children', 'both') or (c.get('audience') is None and not c.get('adult_only', 0))]
-    cult_classes_second_minor = [c for c in cult_classes_minor if c.get('allow_as_second', 1)]
+    def _audience(c):
+        return c.get('audience') or ('adult' if c.get('adult_only', 0) else 'children')
+
+    # Adults: see adult + both classes in slot 1; allow_as_second → slot 2
+    cult_classes_adult        = [c for c in all_cult_classes if _audience(c) in ('adult', 'both')]
+    cult_classes_adult_second = [c for c in cult_classes_adult if c.get('allow_as_second', 0)]
+
+    # Minors:
+    # Slot 1: children classes + both classes where allow_as_second=0
+    # Slot 2: children classes where allow_as_second=1 + both classes where allow_as_second=1
+    cult_classes_minor        = [c for c in all_cult_classes
+                                 if _audience(c) == 'children' or
+                                 (_audience(c) == 'both' and not c.get('allow_as_second', 0))]
+    cult_classes_second_minor = [c for c in all_cult_classes
+                                 if _audience(c) in ('children', 'both') and c.get('allow_as_second', 0)]
 
     existing = {}
     for s in students:
