@@ -2410,7 +2410,7 @@ def export_finance_summary():
         row = [
             fam['last_name_0'], fam['first_name_0'],
             fam['primary_email'], phone,
-            round(tuition_total), minor_count, round(eff_tuit),
+            round(tuition_total), minor_count, round(eff_tuit) if minor_count > 0 else 0,
         ] + [round(cult_totals.get(cid, 0)) for cid in cult_ids] + [
             round(fam_reg_fee), round(late_fee_total), round(fam_pa_fee),
             round(-multi_disc), round(float(total_due)), round(float(total_paid)),
