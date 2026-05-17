@@ -2266,6 +2266,166 @@ def export_finance():
     return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition': 'attachment; filename=mfcs_finance.csv'})
 
+@admin_bp.route('/export/finance/summary')
+@roles_required('admin','finance')
+def export_finance_summary():
+    pid = request.args.get('pid')
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    if not pid:
+        period = _cur_period(cur)
+        pid = period['id'] if period else None
+    if not pid:
+        conn.close()
+        return Response('No period selected.', status=400)
+
+    cur.execute("SELECT * FROM period WHERE id=%s", (pid,))
+    period_data = cur.fetchone() or {}
+    reg_fee  = float(period_data.get('registration_fee') or 0)
+    pa_fee   = float(period_data.get('pa_assignment_deposit') or 0)
+    disc_per = float(period_data.get('discount') or 0)
+    late_fee_per = float(period_data.get('late_fee') or 0)
+
+    # Get all culture classes for this period to use as dynamic columns
+    cur.execute("""SELECT id, name FROM class_group_record
+                   WHERE pid=%s AND type='culture' ORDER BY name""", (pid,))
+    cult_classes = cur.fetchall()
+    cult_ids   = [c['id'] for c in cult_classes]
+    cult_names = [c['name'] for c in cult_classes]
+
+    # Get all families with enrollments
+    cur.execute("""
+        SELECT DISTINCT f.id AS family_id, f.last_name_0, f.first_name_0,
+               f.primary_email, f.primary_phone,
+               fr.id AS fpr_id, fr.total_due, fr.total_paid, fr.adjustment,
+               fr.reg_status, fr.description AS payment_note, fr.last_update,
+               fr.late_fee_waived, fr.reg_fee_waived, fr.first_payment_date,
+               fr.tuition_override
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        WHERE fr.pid=%s
+        ORDER BY f.last_name_0, f.first_name_0
+    """, (pid,))
+    families = cur.fetchall()
+
+    # Get all enrolled students
+    cur.execute("""
+        SELECT s.id, s.fid, s.last_name, s.first_name, s.is_adult,
+               s.mfcs_affiliation, s.birthday,
+               sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+               cc.fee AS cult_fee, cc.discount AS cult_disc, cc.id AS cult_id,
+               cc2.fee AS cult_fee2, cc2.discount AS cult_disc2, cc2.id AS cult_id2
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+        LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE sr.pid=%s
+        AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+    """, (pid,))
+    all_students = cur.fetchall()
+    conn.close()
+
+    from routes.family import _is_adult, _effective_tuition, _is_returning_family, _should_charge_late_fee, _is_late
+
+    # Group students by family
+    from collections import defaultdict
+    students_by_fid = defaultdict(list)
+    for s in all_students:
+        students_by_fid[s['fid']].append(s)
+
+    # Build CSV
+    output = io.StringIO()
+    w = csv.writer(output, quoting=csv.QUOTE_ALL)
+
+    # Header
+    header = [
+        'Last Name', 'First Name', 'Email', 'Phone',
+        'Tuition Total', '# Minors', 'Tuition per Minor',
+    ] + cult_names + [
+        'Registration Fee', 'Late Fee', 'PA Duty Deposit',
+        'Multi-Child Discount', 'Total Due', 'Amount Paid',
+        'Outstanding Balance', 'Status', 'First Payment Date', 'Payment Note'
+    ]
+    w.writerow(header)
+
+    for fam in families:
+        fid      = fam['family_id']
+        students = students_by_fid.get(fid, [])
+
+        # Get effective tuition
+        _conn_t = get_db_connection()
+        eff_tuit, _ = _effective_tuition(period_data, fid, _conn_t)
+        _conn_t.close()
+
+        # Calculate per-student fees
+        minor_count = 0
+        tuition_total = 0.0
+        # Per-culture-class totals
+        cult_totals = {cid: 0.0 for cid in cult_ids}
+
+        for s in students:
+            adult = _is_adult(s)
+            mfcs  = s.get('mfcs_affiliation') == 'Y'
+            cf1_raw = float(s.get('cult_fee')  or 0)
+            cf2_raw = float(s.get('cult_fee2') or 0)
+            d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+            d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+            cf1 = max(0, cf1_raw - d1)
+            cf2 = max(0, cf2_raw - d2)
+            if not adult:
+                minor_count += 1
+                tuition_total += eff_tuit
+            # Accumulate culture class fees
+            cid1 = s.get('cult_id')
+            cid2 = s.get('cult_id2')
+            if cid1 and cid1 in cult_totals: cult_totals[cid1] += cf1
+            if cid2 and cid2 in cult_totals: cult_totals[cid2] += cf2
+
+        extra_kids = max(0, minor_count - 2)
+        multi_disc = extra_kids * disc_per
+
+        # Late fee
+        _conn_l = get_db_connection()
+        charge_late, per_minor = _should_charge_late_fee(
+            period_data, fid, int(pid),
+            float(fam.get('total_paid') or 0),
+            bool(fam.get('late_fee_waived', 0)),
+            _conn_l,
+            first_payment_date=fam.get('first_payment_date')
+        )
+        _conn_l.close()
+        late_fee_total = minor_count * per_minor if charge_late else 0.0
+
+        # Reg fee
+        fam_reg_fee = 0.0 if fam.get('reg_fee_waived') else (reg_fee if minor_count > 0 else 0.0)
+        fam_pa_fee  = pa_fee if minor_count > 0 else 0.0
+
+        total_due    = fam.get('total_due') or 0
+        total_paid   = fam.get('total_paid') or 0
+        balance      = float(total_due) - float(total_paid)
+        phone        = '\t' + str(fam['primary_phone']) if fam.get('primary_phone') else ''
+        fpd          = fam.get('first_payment_date') or ''
+        if hasattr(fpd, 'strftime'): fpd = fpd.strftime('%Y-%m-%d')
+
+        row = [
+            fam['last_name_0'], fam['first_name_0'],
+            fam['primary_email'], phone,
+            round(tuition_total), minor_count, round(eff_tuit),
+        ] + [round(cult_totals.get(cid, 0)) for cid in cult_ids] + [
+            round(fam_reg_fee), round(late_fee_total), round(fam_pa_fee),
+            round(-multi_disc), round(float(total_due)), round(float(total_paid)),
+            round(balance),
+            fam.get('reg_status') or '',
+            str(fpd),
+            fam.get('payment_note') or ''
+        ]
+        w.writerow(row)
+
+    period_name = (period_data.get('name') or 'export').replace(' ', '_')
+    return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename=mfcs_finance_summary_{period_name}.csv'})
+
+
 @admin_bp.route('/export/students')
 @roles_required('admin','finance','language','culture')
 def export_students():
