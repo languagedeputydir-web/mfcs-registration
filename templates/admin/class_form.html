@@ -69,15 +69,19 @@
       </div>
     </div>
     <div class="mb-3">
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="adult_only"
-               id="adult_only"
-               {{ 'checked' if cls and cls.get('adult_only', 0) }}>
-        <label class="form-check-label fw-500" for="adult_only">
-          Adults only (18+)
-        </label>
-        <div class="form-text">If checked, this class will not be shown to students under 18.</div>
-      </div>
+      <label class="form-label fw-500">Audience</label>
+      <select name="audience" class="form-select" style="max-width:280px">
+        <option value="children" {% if not cls or cls.get('audience','children') == 'children' %}selected{% endif %}>
+          Children Only (under 18)
+        </option>
+        <option value="adult" {% if cls and cls.get('audience') == 'adult' %}selected{% endif %}>
+          Adult Only (18+)
+        </option>
+        <option value="both" {% if cls and cls.get('audience') == 'both' %}selected{% endif %}>
+          Both Adults and Children
+        </option>
+      </select>
+      <div class="form-text">Controls which students can see and enroll in this class.</div>
     </div>
     {% else %}
     <input type="hidden" name="fee" value="0">

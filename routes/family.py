@@ -887,11 +887,10 @@ def register_classes(period_id):
 
     # Per-student culture class lists
     cult_classes_all          = all_cult_classes  # for JS fee lookup only
-    cult_classes_adult        = [c for c in all_cult_classes if c.get('adult_only', 0)]
+    cult_classes_adult        = [c for c in all_cult_classes if c.get('audience') in ('adult', 'both') or (c.get('audience') is None and c.get('adult_only', 0))]
     cult_classes_adult_second = [c for c in cult_classes_adult if c.get('allow_as_second', 1)]
-    cult_classes_minor        = [c for c in all_cult_classes if not c.get('adult_only', 0)]
-    cult_classes_second_minor = [c for c in all_cult_classes
-                                 if not c.get('adult_only', 0) and c.get('allow_as_second', 1)]
+    cult_classes_minor        = [c for c in all_cult_classes if c.get('audience') in ('children', 'both') or (c.get('audience') is None and not c.get('adult_only', 0))]
+    cult_classes_second_minor = [c for c in cult_classes_minor if c.get('allow_as_second', 1)]
 
     existing = {}
     for s in students:
