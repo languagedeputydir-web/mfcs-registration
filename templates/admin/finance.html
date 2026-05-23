@@ -61,11 +61,18 @@
   <div class="col-4 col-md-2">
     <div class="card p-2 text-center">
       <div class="fw-600 fs-5" style="color:var(--mfcs-red)">
-        {% set ns = namespace(total=0) %}
-        {% for r in registrations %}{% set ns.total = ns.total + (r.student_details|length) %}{% endfor %}
+        {% set ns = namespace(total=0, minors=0, adults=0) %}
+        {% for r in registrations %}
+          {% for s in r.student_details %}
+            {% set ns.total = ns.total + 1 %}
+            {% if s.is_adult %}{% set ns.adults = ns.adults + 1 %}{% else %}{% set ns.minors = ns.minors + 1 %}{% endif %}
+          {% endfor %}
+        {% endfor %}
         {{ ns.total }}
       </div>
-      <div class="small text-muted">Students</div>
+      <div class="small text-muted">Students
+        <br><span style="font-size:.7rem">{{ ns.minors }} minor · {{ ns.adults }} adult</span>
+      </div>
     </div>
   </div>
   <div class="col-4 col-md-3">
