@@ -199,6 +199,8 @@ def dashboard():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur)
     registered_students = 0
+    registered_minors   = 0
+    registered_adults   = 0
     registered_families = 0
     total_collected = 0.0
     unpaid_balance  = 0.0
@@ -210,6 +212,18 @@ def dashboard():
             AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
             (period['id'],))
         registered_students = cur.fetchone()['n']
+        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s AND s.is_adult=0
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_minors = cur.fetchone()['n']
+        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s AND s.is_adult=1
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_adults = cur.fetchone()['n']
         cur.execute("""SELECT COUNT(DISTINCT s.fid) AS n
             FROM student_record sr JOIN student s ON s.id=sr.sid
             WHERE sr.pid=%s
@@ -235,6 +249,8 @@ def dashboard():
     return render_template('admin/dashboard.html',
         period=period,
         registered_students=registered_students,
+        registered_minors=registered_minors,
+        registered_adults=registered_adults,
         registered_families=registered_families,
         total_collected=total_collected,
         unpaid_balance=unpaid_balance,

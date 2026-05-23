@@ -23,7 +23,9 @@
   <div class="col-6 col-sm-3">
     <div class="card p-3 text-center h-100">
       <div class="fw-700" style="font-size:1.8rem;color:var(--mfcs-red)">{{ registered_students }}</div>
-      <div class="small text-muted">Registered<br><span style="font-size:.7rem">Students</span></div>
+      <div class="small text-muted">Students
+        <br><span style="font-size:.7rem">{{ registered_minors }} minor · {{ registered_adults }} adult</span>
+      </div>
     </div>
   </div>
   <div class="col-6 col-sm-3">
