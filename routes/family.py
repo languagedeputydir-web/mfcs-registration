@@ -77,6 +77,22 @@ def _check(plain, stored):
         pass
     return plain == stored
 
+def _age(birthday):
+    """Return age in years from a birthday string or date, or None if invalid."""
+    if not birthday:
+        return None
+    try:
+        from datetime import datetime as dt
+        if hasattr(birthday, 'year'):
+            bd = birthday
+        else:
+            bd = dt.strptime(str(birthday), '%Y-%m-%d').date()
+        today = _today_eastern()
+        return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+    except Exception:
+        return None
+
+
 def _today_eastern():
     """Return today's date in US Eastern time (avoids UTC off-by-one at night)."""
     try:
@@ -968,7 +984,6 @@ def register_classes(period_id):
         _fpr_w = _cur_w.fetchone()
         _conn_w.close()
         reg_fee_waived = bool((_fpr_w or {}).get('reg_fee_waived', 0))
-        print(f"REG_FEE_WAIVED DEBUG: fid={current_user.id} pid={period_id} fpr_w={_fpr_w} waived={reg_fee_waived}", flush=True)
     except Exception as e:
         print(f"REG_FEE_WAIVED ERROR: {e}", flush=True)
         reg_fee_waived = False
