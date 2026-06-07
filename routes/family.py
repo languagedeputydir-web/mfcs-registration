@@ -603,8 +603,34 @@ def submit_registration(period_id):
     )
     cult_fee_map = {r['id']: float(r['fee']) for r in cur.fetchall()}
 
-    # Determine effective tuition (standard vs grandfathered)
+    # Determine effective tuition.
+    # If the family already has a saved registration, check whether their stored
+    # total_due implies the grandfathered rate — if so, keep using it regardless
+    # of whether the deadline has since passed.
+    cur.execute(
+        "SELECT id, total_due, reg_status, description FROM family_record "
+        "WHERE fid=%s AND pid=%s", (current_user.id, period_id)
+    )
+    _existing_fpr = cur.fetchone()
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn)
+
+    if _existing_fpr and _existing_fpr.get('total_due'):
+        _gf = period.get('grandfathered_tuition')
+        _std = float(period.get('tuition') or 0)
+        if _gf:
+            # Count minors and culture fees in current selection
+            _minor_c = sum(1 for s in students.values()
+                          if not _is_adult(s))
+            _cult_t = sum(cult_fee_amount.get(s_id, 0.0) + cult_fee_amount2.get(s_id, 0.0)
+                         for s_id in students)
+            _reg = float(period.get('registration_fee') or 0)
+            _pa  = float(period.get('pa_assignment_deposit') or 0)
+            _saved = float(_existing_fpr['total_due'])
+            if _minor_c > 0:
+                _implied = (_saved - _cult_t - _reg - _pa) / _minor_c
+                if abs(_implied - float(_gf)) <= 1.0:
+                    eff_tuition  = float(_gf)
+                    tuition_type = 'grandfathered' 
     student_subtotal = 0.0
 
     for sid, student in students.items():
