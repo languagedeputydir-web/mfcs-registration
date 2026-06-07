@@ -149,13 +149,17 @@ def dashboard():
     fee_changed_count = 0
     if period:
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr WHERE sr.pid=%s""",(period['id'],))
+            FROM student_record sr WHERE sr.pid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
+                 OR sr.ccgrid2 IS NOT NULL)""",(period['id'],))
         registered_students = cur.fetchone()['n']
         # Adult = registered for at least one adult-only culture class
-        # Minor = all others
+        # Minor = all others (students with classes selected only)
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
             FROM student_record sr
             WHERE sr.pid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
+                 OR sr.ccgrid2 IS NOT NULL)
             AND (
                 EXISTS (SELECT 1 FROM class_group_record cc
                         WHERE cc.id=sr.ccgrid AND cc.adult_only=1)
@@ -982,9 +986,11 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
-            COUNT(s.id) AS student_count
+            COUNT(DISTINCT sr.sid) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
-            LEFT JOIN student s ON s.fid=f.id
+            LEFT JOIN student_record sr ON sr.pid=fr.pid
+                AND sr.sid IN (SELECT id FROM student WHERE fid=f.id)
+                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
             WHERE fr.pid=%s {sc} GROUP BY fr.id
             ORDER BY f.last_name_0,f.first_name_0""",(pid,))
         regs = cur.fetchall()
