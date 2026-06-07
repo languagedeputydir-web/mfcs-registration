@@ -746,9 +746,17 @@ def fee_summary(period_id):
     reg_fee  = float(period.get('registration_fee') or 0) if period else 0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
 
-    # Determine effective tuition for this family
+    # Determine effective tuition:
+    # If the family already has a saved total_due, back-calculate the tuition
+    # rate from what was actually stored — never let a deadline expiry change
+    # a fee that was already locked in at registration time.
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn) if period else (0, 'standard')
     conn.close()
+
+    # If registration exists and total_due is already saved, use that as
+    # the display total (authoritative). Recalculate per-student breakdown
+    # using the stored total proportionally, but keep grand_total = fpr.total_due.
+    saved_total = float(fpr['total_due']) if fpr and fpr.get('total_due') else None
 
     rows = []
     student_subtotal = 0.0
@@ -781,7 +789,13 @@ def fee_summary(period_id):
                      'age':         age,
                      'is_adult':    adult})
 
-    grand_total = student_subtotal + reg_fee + pa_fee
+    # Use saved total_due as the authoritative grand total when available.
+    # This prevents deadline expiry from showing a higher fee to families
+    # who already registered and paid at the grandfathered rate.
+    if saved_total is not None:
+        grand_total = saved_total
+    else:
+        grand_total = student_subtotal + reg_fee + pa_fee
 
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,
@@ -791,4 +805,5 @@ def fee_summary(period_id):
                            pa_fee=pa_fee,
                            grand_total=grand_total,
                            tuition_type=tuition_type,
-                           eff_tuition=eff_tuition)
+                           eff_tuition=eff_tuition,
+                           saved_total=saved_total)
