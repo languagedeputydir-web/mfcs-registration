@@ -47,7 +47,7 @@
       <tr>
         <td class="fw-500">{{ c.name }}</td>
         <td class="text-muted">{{ c.chinese_name if c.chinese_name not in ('?','') else '—' }}</td>
-        <td class="text-end">{{ c.fee or 0|currency }}</td>
+        <td class="text-end">{{ (c.fee or 0)|currency }}</td>
         <td class="small">{{ c.teachers if c.teachers else '—' }}</td>
         <td class="small">{{ c.tas if c.tas else '—' }}</td>
         <td class="text-center">{{ c.student_count or 0 }}</td>

@@ -29,9 +29,9 @@
   <div>
     <strong>{{ fpr.reg_status }}</strong> for {{ period.name }}
     &nbsp;·&nbsp;
-    Due: <strong>{{ fpr.total_due or 0|currency }}</strong>
+    Due: <strong>{{ (fpr.total_due or 0)|currency }}</strong>
     &nbsp;·&nbsp;
-    Paid: <strong>{{ fpr.total_paid or 0|currency }}</strong>
+    Paid: <strong>{{ (fpr.total_paid or 0)|currency }}</strong>
     {% set balance = (fpr.total_due or 0) - (fpr.total_paid or 0) - (fpr.adjustment or 0) %}
     {% if balance > 0.01 %}
       &nbsp;·&nbsp; <span class="text-danger fw-600">Balance: {{ balance|currency }}</span>

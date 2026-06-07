@@ -23,10 +23,10 @@
       {% for p in periods %}
       <tr>
         <td class="fw-500">{{ p.name }}</td>
-        <td class="text-end">{{ p.tuition or 0|currency }}</td>
-        <td class="text-end">{{ p.registration_fee or 0|currency }}</td>
-        <td class="text-end">{{ p.pa_assignment_deposit or 0|currency }}</td>
-        <td class="text-end">{{ p.late_fee or 0|currency }}</td>
+        <td class="text-end">{{ (p.tuition or 0)|currency }}</td>
+        <td class="text-end">{{ (p.registration_fee or 0)|currency }}</td>
+        <td class="text-end">{{ (p.pa_assignment_deposit or 0)|currency }}</td>
+        <td class="text-end">{{ (p.late_fee or 0)|currency }}</td>
         <td class="small text-muted">
           {{ p.deadline if p.deadline and p.deadline|string != '2999-01-01' else '—' }}
         </td>

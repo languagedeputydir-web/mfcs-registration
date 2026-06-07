@@ -90,11 +90,11 @@
     <div class="row g-2 mb-3">
       <div class="col-auto">
         <span class="text-muted small">Due:</span>
-        <strong>{{ fr.total_due or 0|currency }}</strong>
+        <strong>{{ (fr.total_due or 0)|currency }}</strong>
       </div>
       <div class="col-auto">
         <span class="text-muted small">Paid:</span>
-        <strong>{{ fr.total_paid or 0|currency }}</strong>
+        <strong>{{ (fr.total_paid or 0)|currency }}</strong>
       </div>
       {% if fr.adjustment %}
       <div class="col-auto">

@@ -104,11 +104,11 @@
   <table class="table table-sm mb-0">
     <tr>
       <td>Total due</td>
-      <td class="text-end">{{ fpr.total_due or 0|currency }}</td>
+      <td class="text-end">{{ (fpr.total_due or 0)|currency }}</td>
     </tr>
     <tr>
       <td>Total paid</td>
-      <td class="text-end">{{ fpr.total_paid or 0|currency }}</td>
+      <td class="text-end">{{ (fpr.total_paid or 0)|currency }}</td>
     </tr>
     {% if fpr.adjustment %}
     <tr>
@@ -154,7 +154,7 @@
   <div class="small">
     <strong>How fees are calculated:</strong><br>
     • Students <strong>under 18</strong>:
-      Tuition ({{ period.tuition or 0|currency }}) + cultural program fee(s)<br>
+      Tuition ({{ (period.tuition or 0)|currency }}) + cultural program fee(s)<br>
     • Students <strong>18 or older</strong>: Cultural program fee(s) only<br>
     • Language program: included in tuition &nbsp;·&nbsp;
       Up to 2 cultural programs per student

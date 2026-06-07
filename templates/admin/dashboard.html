@@ -68,9 +68,9 @@
      style="background:#fafafa">
   <div class="small text-muted">
     <strong>{{ period.name }}</strong> &nbsp;·&nbsp;
-    Tuition {{ period.tuition or 0|currency }} &nbsp;·&nbsp;
-    Reg fee {{ period.registration_fee or 0|currency }} &nbsp;·&nbsp;
-    PA deposit {{ period.pa_assignment_deposit or 0|currency }}
+    Tuition {{ (period.tuition or 0)|currency }} &nbsp;·&nbsp;
+    Reg fee {{ (period.registration_fee or 0)|currency }} &nbsp;·&nbsp;
+    PA deposit {{ (period.pa_assignment_deposit or 0)|currency }}
     {% if period.deadline and period.deadline|string != '2999-01-01' %}
     &nbsp;·&nbsp; Deadline {{ period.deadline }}
     {% endif %}
