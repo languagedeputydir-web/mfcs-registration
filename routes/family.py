@@ -746,17 +746,38 @@ def fee_summary(period_id):
     reg_fee  = float(period.get('registration_fee') or 0) if period else 0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
 
-    # Determine effective tuition:
-    # If the family already has a saved total_due, back-calculate the tuition
-    # rate from what was actually stored — never let a deadline expiry change
-    # a fee that was already locked in at registration time.
+    # Determine effective tuition.
+    # If registration already exists, back-calculate the real tuition from the
+    # stored total_due — so grandfathered rates don't flip to full after deadline.
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn) if period else (0, 'standard')
     conn.close()
 
-    # If registration exists and total_due is already saved, use that as
-    # the display total (authoritative). Recalculate per-student breakdown
-    # using the stored total proportionally, but keep grand_total = fpr.total_due.
     saved_total = float(fpr['total_due']) if fpr and fpr.get('total_due') else None
+
+    # Back-calculate eff_tuition from saved_total so the per-student breakdown
+    # shows the rate actually used, not today's live-calculated rate.
+    if saved_total is not None and period and raw_rows:
+        total_cult_all = sum(
+            float(r.get('cult_fee') or 0) + float(r.get('cult_fee2') or 0)
+            for r in raw_rows
+        )
+        minor_count = sum(
+            1 for r in raw_rows
+            if not (_age(r.get('birthday')) is not None and _age(r.get('birthday')) >= 18)
+        )
+        if minor_count > 0:
+            implied = (saved_total - total_cult_all - reg_fee - pa_fee) / minor_count
+            std = float(period.get('tuition') or 0)
+            gf  = float(period.get('grandfathered_tuition') or std)
+            if abs(implied - gf) <= 1.0:
+                eff_tuition  = gf
+                tuition_type = 'grandfathered'
+            elif abs(implied - std) <= 1.0:
+                eff_tuition  = std
+                tuition_type = 'standard'
+            else:
+                eff_tuition  = max(0, implied)  # unusual stored amount — use as-is
+                tuition_type = 'standard'
 
     rows = []
     student_subtotal = 0.0
@@ -770,16 +791,16 @@ def fee_summary(period_id):
         if adult:
             student_fee = total_cult
             fee_note    = 'Adult — culture fee'
-            if cult_fee:  fee_note += f' ${cult_fee:.2f}'
-            if cult_fee2: fee_note += f' + ${cult_fee2:.2f}'
+            if cult_fee:  fee_note += f' ${cult_fee:,.0f}'
+            if cult_fee2: fee_note += f' + ${cult_fee2:,.0f}'
         else:
             student_fee = eff_tuition + total_cult
-            tuition_label = f'Tuition ${eff_tuition:.2f}'
+            tuition_label = f'Tuition ${eff_tuition:,.0f}'
             if tuition_type == 'grandfathered':
                 tuition_label += ' ✦'
             parts = [tuition_label]
-            if cult_fee:  parts.append(f'Culture ${cult_fee:.2f}')
-            if cult_fee2: parts.append(f'Culture 2 ${cult_fee2:.2f}')
+            if cult_fee:  parts.append(f'Culture ${cult_fee:,.0f}')
+            if cult_fee2: parts.append(f'Culture 2 ${cult_fee2:,.0f}')
             fee_note = ' + '.join(parts)
 
         student_subtotal += student_fee
@@ -789,13 +810,8 @@ def fee_summary(period_id):
                      'age':         age,
                      'is_adult':    adult})
 
-    # Use saved total_due as the authoritative grand total when available.
-    # This prevents deadline expiry from showing a higher fee to families
-    # who already registered and paid at the grandfathered rate.
-    if saved_total is not None:
-        grand_total = saved_total
-    else:
-        grand_total = student_subtotal + reg_fee + pa_fee
+    # grand_total: use saved DB value as authoritative when available
+    grand_total = saved_total if saved_total is not None else student_subtotal + reg_fee + pa_fee
 
     return render_template('family/fee_summary.html',
                            period=period, fpr=fpr,

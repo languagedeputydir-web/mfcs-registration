@@ -141,6 +141,8 @@ def dashboard():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur)
     registered_students = 0
+    minor_students      = 0
+    adult_students      = 0
     total_collected = 0.0
     unpaid_balance  = 0.0
     unpaid_families = 0
@@ -149,6 +151,19 @@ def dashboard():
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
             FROM student_record sr WHERE sr.pid=%s""",(period['id'],))
         registered_students = cur.fetchone()['n']
+        # Adult = registered for at least one adult-only culture class
+        # Minor = all others
+        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
+            FROM student_record sr
+            WHERE sr.pid=%s
+            AND (
+                EXISTS (SELECT 1 FROM class_group_record cc
+                        WHERE cc.id=sr.ccgrid AND cc.adult_only=1)
+             OR EXISTS (SELECT 1 FROM class_group_record cc2
+                        WHERE cc2.id=sr.ccgrid2 AND cc2.adult_only=1)
+            )""", (period['id'],))
+        adult_students = int(cur.fetchone()['n'])
+        minor_students = registered_students - adult_students
         cur.execute("""SELECT COALESCE(SUM(total_paid),0) AS tot
             FROM family_record WHERE pid=%s""",(period['id'],))
         total_collected = float(cur.fetchone()['tot'])
@@ -168,6 +183,8 @@ def dashboard():
     return render_template('admin/dashboard.html',
         period=period,
         registered_students=registered_students,
+        minor_students=minor_students,
+        adult_students=adult_students,
         total_collected=total_collected,
         unpaid_balance=unpaid_balance,
         unpaid_families=unpaid_families,
