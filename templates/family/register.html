@@ -14,15 +14,15 @@
   <strong>Fee information for {{ period.name }}:</strong>
   <ul class="mb-0 mt-1">
     <li>Students <strong>under 18</strong>: Tuition
-      <strong>${{ "%.2f"|format(period.tuition or 0) }}</strong>
+      <strong>{{ period.tuition or 0|currency }}</strong>
       + cultural program fee(s)</li>
     <li>Students <strong>18 or older</strong>: Cultural program fee(s) only</li>
     <li>Language program: included in tuition — no extra charge</li>
     <li>Up to <strong>2 cultural programs</strong> may be selected per student</li>
     <li>Registration fee (per family):
-      <strong>${{ "%.2f"|format(period.registration_fee or 0) }}</strong></li>
+      <strong>{{ period.registration_fee or 0|currency }}</strong></li>
     <li>PA Assignment Duty deposit (refundable, per family):
-      <strong>${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong></li>
+      <strong>{{ period.pa_assignment_deposit or 0|currency }}</strong></li>
   </ul>
 </div>
 
@@ -101,7 +101,7 @@
               ({{ cc.chinese_name }})
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
-              — ${{ "%.0f"|format(cc.fee|float) }}
+              — {{ cc.fee|float|currency }}
             {% endif %}
           </option>
           {% endfor %}
@@ -126,7 +126,7 @@
               ({{ cc.chinese_name }})
             {% endif %}
             {% if cc.fee and cc.fee|float > 0 %}
-              — ${{ "%.0f"|format(cc.fee|float) }}
+              — {{ cc.fee|float|currency }}
             {% endif %}
           </option>
           {% endfor %}
@@ -142,9 +142,9 @@
   <div class="card p-3 mb-3 bg-light border-0">
     <div class="small">
       Added once for your family:
-      <strong>Registration fee ${{ "%.2f"|format(period.registration_fee or 0) }}</strong>
+      <strong>Registration fee {{ period.registration_fee or 0|currency }}</strong>
       &nbsp;+&nbsp;
-      <strong>PA Assignment Duty deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}</strong>
+      <strong>PA Assignment Duty deposit {{ period.pa_assignment_deposit or 0|currency }}</strong>
       <span class="text-muted">(PA deposit is refundable upon completion of duty)</span>
     </div>
   </div>

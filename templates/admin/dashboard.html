@@ -21,11 +21,19 @@
     <div class="card p-3 text-center h-100">
       <div class="fw-700" style="font-size:1.8rem;color:var(--mfcs-red)">{{ registered_students }}</div>
       <div class="small text-muted">Registered<br><span style="font-size:.7rem">Students</span></div>
+      <div class="mt-2 d-flex justify-content-center gap-3">
+        <span class="small text-muted">
+          <span class="fw-600 text-dark">{{ minor_students }}</span> minor
+        </span>
+        <span class="small text-muted">
+          <span class="fw-600 text-dark">{{ adult_students }}</span> adult
+        </span>
+      </div>
     </div>
   </div>
   <div class="col-6 col-sm-3">
     <div class="card p-3 text-center h-100">
-      <div class="fw-700 text-success" style="font-size:1.8rem">${{ "%.0f"|format(total_collected) }}</div>
+      <div class="fw-700 text-success" style="font-size:1.8rem">{{ total_collected|currency }}</div>
       <div class="small text-muted">Payment<br><span style="font-size:.7rem">Collected</span></div>
     </div>
   </div>
@@ -33,7 +41,7 @@
     <a href="{{ url_for('admin.finance', pid=period.id) }}" class="text-decoration-none">
     <div class="card p-3 text-center h-100 {{ 'border-danger' if unpaid_families > 0 }}">
       <div class="fw-700" style="font-size:1.8rem;color:{{ '#c0392b' if unpaid_families > 0 else '#27ae60' }}">
-        ${{ "%.0f"|format(unpaid_balance) }}
+        {{ unpaid_balance|currency }}
       </div>
       <div class="small text-muted">Unpaid<br>
         <span style="font-size:.7rem">
@@ -60,9 +68,9 @@
      style="background:#fafafa">
   <div class="small text-muted">
     <strong>{{ period.name }}</strong> &nbsp;·&nbsp;
-    Tuition ${{ "%.2f"|format(period.tuition or 0) }} &nbsp;·&nbsp;
-    Reg fee ${{ "%.2f"|format(period.registration_fee or 0) }} &nbsp;·&nbsp;
-    PA deposit ${{ "%.2f"|format(period.pa_assignment_deposit or 0) }}
+    Tuition {{ period.tuition or 0|currency }} &nbsp;·&nbsp;
+    Reg fee {{ period.registration_fee or 0|currency }} &nbsp;·&nbsp;
+    PA deposit {{ period.pa_assignment_deposit or 0|currency }}
     {% if period.deadline and period.deadline|string != '2999-01-01' %}
     &nbsp;·&nbsp; Deadline {{ period.deadline }}
     {% endif %}

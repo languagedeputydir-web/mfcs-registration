@@ -90,22 +90,22 @@
     <div class="row g-2 mb-3">
       <div class="col-auto">
         <span class="text-muted small">Due:</span>
-        <strong>${{ "%.2f"|format(fr.total_due or 0) }}</strong>
+        <strong>{{ fr.total_due or 0|currency }}</strong>
       </div>
       <div class="col-auto">
         <span class="text-muted small">Paid:</span>
-        <strong>${{ "%.2f"|format(fr.total_paid or 0) }}</strong>
+        <strong>{{ fr.total_paid or 0|currency }}</strong>
       </div>
       {% if fr.adjustment %}
       <div class="col-auto">
         <span class="text-muted small">Adjustment:</span>
-        <strong>${{ "%.2f"|format(fr.adjustment) }}</strong>
+        <strong>{{ fr.adjustment|currency }}</strong>
       </div>
       {% endif %}
       {% set balance = (fr.total_due or 0)|float - (fr.total_paid or 0)|float - (fr.adjustment or 0)|float %}
       {% if balance > 0.01 %}
       <div class="col-auto">
-        <span class="text-danger small fw-600">Balance: ${{ "%.2f"|format(balance) }}</span>
+        <span class="text-danger small fw-600">Balance: {{ balance|currency }}</span>
       </div>
       {% endif %}
     </div>
@@ -136,7 +136,7 @@
           <td class="small">{{ sr.lang_class_name or '—' }}</td>
           <td class="small">{{ sr.cult_class_name or '—' }}</td>
           <td class="small">{{ sr.cult_class2_name or '—' }}</td>
-          <td class="text-end small">${{ "%.2f"|format(sfee) }}</td>
+          <td class="text-end small">{{ sfee|currency }}</td>
         </tr>
         {% endfor %}
       </tbody>

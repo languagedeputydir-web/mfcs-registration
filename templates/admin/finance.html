@@ -58,20 +58,20 @@
   </div>
   <div class="col-4 col-md-3">
     <div class="card p-2 text-center">
-      <div class="fw-600 fs-5">${{ "%.2f"|format(total_due_sum) }}</div>
+      <div class="fw-600 fs-5">{{ total_due_sum|currency }}</div>
       <div class="small text-muted">Total Due</div>
     </div>
   </div>
   <div class="col-4 col-md-3">
     <div class="card p-2 text-center">
-      <div class="fw-600 fs-5 text-success">${{ "%.2f"|format(total_paid_sum) }}</div>
+      <div class="fw-600 fs-5 text-success">{{ total_paid_sum|currency }}</div>
       <div class="small text-muted">Total Collected</div>
     </div>
   </div>
   <div class="col-4 col-md-3">
     <div class="card p-2 text-center">
       <div class="fw-600 fs-5 {{ 'text-danger' if balance_sum > 0 else 'text-success' }}">
-        ${{ "%.2f"|format(balance_sum) }}
+        {{ balance_sum|currency }}
       </div>
       <div class="small text-muted">Outstanding Balance</div>
     </div>
@@ -106,10 +106,10 @@
         </td>
         <td class="text-muted">{{ r.primary_email }}</td>
         <td class="text-center">{{ r.student_count }}</td>
-        <td class="text-end">${{ "%.2f"|format(r.total_due or 0) }}</td>
-        <td class="text-end">${{ "%.2f"|format(r.total_paid or 0) }}</td>
+        <td class="text-end">{{ r.total_due or 0|currency }}</td>
+        <td class="text-end">{{ r.total_paid or 0|currency }}</td>
         <td class="text-end {{ 'text-danger fw-600' if r.balance > 0.01 else 'text-success' }}">
-          ${{ "%.2f"|format(r.balance) }}
+          {{ r.balance|currency }}
         </td>
         <td>
           <span class="badge
