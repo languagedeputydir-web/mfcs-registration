@@ -1103,23 +1103,19 @@ def family_detail(fid):
     student_records = [sr for sr in student_records
                        if sr.get('lcgrid') or sr.get('ccgrid') or sr.get('ccgrid2')]
     # Calculate per-student fee for display.
-    # Use each period's stored family_record.total_due to back-calculate the
-    # effective tuition — this ensures fees locked before a grandfathered deadline
-    # continue to display correctly after that deadline passes.
-    from routes.family import _age, _is_adult, _calc_student_fee, _effective_tuition
+    # Use a fresh connection — original conn was already closed above.
+    from routes.family import _age, _is_adult, _calc_student_fee
 
-    # Build a map of pid → effective tuition (from stored total when possible)
+    conn2 = get_db_connection(); cur2 = conn2.cursor(dictionary=True)
     tuition_by_pid = {}
     for fr in family_records:
         pid_key = fr['pid']
         stored_total = float(fr.get('total_due') or 0)
-        # Get period details
-        cur.execute("SELECT * FROM period WHERE id=%s", (pid_key,))
-        p = cur.fetchone()
+        cur2.execute("SELECT * FROM period WHERE id=%s", (pid_key,))
+        p = cur2.fetchone()
         if not p:
             tuition_by_pid[pid_key] = 0.0
             continue
-        # Count minors in this period to back-calculate tuition
         pid_students = [sr for sr in student_records
                         if sr.get('pid') == pid_key]
         minor_count = sum(1 for sr in pid_students
@@ -1130,10 +1126,8 @@ def family_detail(fid):
         )
         reg_fee = float(p.get('registration_fee') or 0)
         pa_fee  = float(p.get('pa_assignment_deposit') or 0)
-        # Back-calculate: stored_total = minor_count*tuition + cult_total + reg_fee + pa_fee
         if minor_count > 0 and stored_total > 0:
             implied_tuition = (stored_total - cult_total - reg_fee - pa_fee) / minor_count
-            # Sanity check: must be between grandfathered and standard rates
             std = float(p.get('tuition') or 0)
             gf  = float(p.get('grandfathered_tuition') or std)
             if abs(implied_tuition - gf) < 1.0:
@@ -1144,6 +1138,7 @@ def family_detail(fid):
                 tuition_by_pid[pid_key] = implied_tuition
         else:
             tuition_by_pid[pid_key] = float(p.get('tuition') or 0)
+    conn2.close()
 
     for sr in student_records:
         student_dict = {'birthday': sr.get('birthday')}
