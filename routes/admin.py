@@ -1,5 +1,5 @@
 """
-routes/admin.py  — full admin portal
+routes/admin.py  — full admin portal 2026
 Roles: admin | finance | language | culture
 """
 import os, csv, io, smtplib
