@@ -120,45 +120,18 @@
           </span>
         </td>
         <td>
-          <div class="d-flex gap-1 flex-wrap">
-            <button class="btn btn-sm btn-outline-secondary"
-                    data-bs-toggle="modal"
-                    data-bs-target="#payModal"
-                    data-fpr="{{ r.fpr_id }}"
-                    data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
-                    data-due="{{ r.total_due or 0 }}"
-                    data-paid="{{ r.total_paid or 0 }}"
-                    data-note="{{ r.description or '' }}"
-                    data-status="{{ r.reg_status }}"
-                    data-pid="{{ selected_period.id if selected_period else '' }}">
-              Update
-            </button>
-            {% if selected_period and selected_period.grandfathered_tuition %}
-            {% if r.tuition_override == 'standard' or (r.tuition_override is none and not r.is_grandfathered) %}
-            <form method="post" action="{{ url_for('admin.switch_tuition') }}" style="display:inline">
-              <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
-              <input type="hidden" name="pid" value="{{ selected_period.id }}">
-              <input type="hidden" name="new_rate" value="grandfathered">
-              <button type="submit" class="btn btn-sm btn-outline-warning"
-                      title="Switch to grandfathered tuition ${{ '%.2f'|format(selected_period.grandfathered_tuition) }}"
-                      onclick="return confirm('Switch {{ r.last_name_0 }}, {{ r.first_name_0 }} to grandfathered tuition (${{ '%.2f'|format(selected_period.grandfathered_tuition) }})?')">
-                ↓ Grandfather
-              </button>
-            </form>
-            {% else %}
-            <form method="post" action="{{ url_for('admin.switch_tuition') }}" style="display:inline">
-              <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
-              <input type="hidden" name="pid" value="{{ selected_period.id }}">
-              <input type="hidden" name="new_rate" value="standard">
-              <button type="submit" class="btn btn-sm btn-outline-secondary"
-                      title="Switch to full tuition ${{ '%.2f'|format(selected_period.tuition) }}"
-                      onclick="return confirm('Switch {{ r.last_name_0 }}, {{ r.first_name_0 }} to full tuition (${{ '%.2f'|format(selected_period.tuition) }})?')">
-                ↑ Full Tuition
-              </button>
-            </form>
-            {% endif %}
-            {% endif %}
-          </div>
+          <button class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#payModal"
+                  data-fpr="{{ r.fpr_id }}"
+                  data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
+                  data-due="{{ r.total_due or 0 }}"
+                  data-paid="{{ r.total_paid or 0 }}"
+                  data-note="{{ r.description or '' }}"
+                  data-status="{{ r.reg_status }}"
+                  data-pid="{{ selected_period.id if selected_period else '' }}">
+            Update
+          </button>
         </td>
       </tr>
       {% else %}

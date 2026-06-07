@@ -91,26 +91,19 @@ def _calc_student_fee(student, period, cult_fee, cult_fee2=0, tuition_override=N
         return tuition + culture
 
 
-def _effective_tuition(period, family_id, conn, tuition_override=None):
+def _effective_tuition(period, family_id, conn):
     """
     Determine the effective tuition for a family registering for a period.
-    tuition_override: 'standard', 'grandfathered', or None (auto-detect).
-    Rules (when override is None):
+    Rules:
       - If no grandfathered_tuition set → use period.tuition
       - If family has a previous family_record in ANY period → existing family
         - If today <= grandfathered_deadline → use grandfathered_tuition
         - Else → use period.tuition
       - New family (no prior records) → always use period.tuition
     """
-    g_tuition   = period.get('grandfathered_tuition')
-    g_deadline  = period.get('grandfathered_deadline')
+    g_tuition  = period.get('grandfathered_tuition')
+    g_deadline = period.get('grandfathered_deadline')
     std_tuition = float(period.get('tuition') or 0)
-
-    # Respect explicit override set by finance user
-    if tuition_override == 'grandfathered' and g_tuition:
-        return float(g_tuition), 'grandfathered'
-    if tuition_override == 'standard':
-        return std_tuition, 'standard'
 
     if not g_tuition:
         return std_tuition, 'standard'
@@ -611,13 +604,7 @@ def submit_registration(period_id):
     cult_fee_map = {r['id']: float(r['fee']) for r in cur.fetchall()}
 
     # Determine effective tuition (standard vs grandfathered)
-    # Fetch any manual tuition override set by finance
-    cur.execute("SELECT tuition_override FROM family_record WHERE fid=%s AND pid=%s",
-                (current_user.id, period_id))
-    _fpr_ov = cur.fetchone()
-    _override = (_fpr_ov or {}).get('tuition_override')
-    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn,
-                                                    tuition_override=_override)
+    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn)
     student_subtotal = 0.0
 
     for sid, student in students.items():
@@ -760,13 +747,7 @@ def fee_summary(period_id):
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
 
     # Determine effective tuition for this family
-    # Fetch any manual tuition override set by finance
-    cur.execute("SELECT tuition_override FROM family_record WHERE fid=%s AND pid=%s",
-                (current_user.id, period_id))
-    _fpr_ov = cur.fetchone()
-    _override = (_fpr_ov or {}).get('tuition_override')
-    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn,
-                                                    tuition_override=_override) if period else (0, 'standard')
+    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn) if period else (0, 'standard')
     conn.close()
 
     rows = []

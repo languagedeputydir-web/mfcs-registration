@@ -1,5 +1,5 @@
 """
-routes/admin.py  — full admin portal 2026
+routes/admin.py  — full admin portal
 Roles: admin | finance | language | culture
 """
 import csv, io
@@ -52,72 +52,37 @@ def _periods_list(cur):
 
 def _recalc_family_record(cur, fid, pid):
     """Recalculate total_due for a family in a period based on current
-    student_record selections, respecting any tuition_override.
-    If total changed and status was Complete, reverts to Pending and appends a note.
+    student_record selections. If total changed and status was Complete,
+    reverts to Pending and appends a note.
     Returns (new_total, status_changed_to_pending)."""
     cur.execute("SELECT * FROM period WHERE id=%s", (pid,))
     period = cur.fetchone()
     if not period:
         return 0.0, False
 
-    from routes.family import _calc_student_fee, _calc_total_family_fee
-
-    # Fetch family_record (for override and current totals)
-    cur.execute(
-        "SELECT id, total_due, reg_status, description, tuition_override "
-        "FROM family_record WHERE fid=%s AND pid=%s", (fid, pid)
-    )
-    fpr = cur.fetchone()
-
-    # Determine effective tuition respecting override
-    t_override = (fpr or {}).get('tuition_override')
-    if t_override == 'grandfathered' and period.get('grandfathered_tuition'):
-        eff_tuition = float(period['grandfathered_tuition'])
-    elif t_override == 'standard':
-        eff_tuition = float(period.get('tuition') or 0)
-    else:
-        # Auto-detect: grandfathered if existing family within deadline
-        from datetime import date as _date
-        g_t = period.get('grandfathered_tuition')
-        g_d = period.get('grandfathered_deadline')
-        eff_tuition = float(period.get('tuition') or 0)
-        if g_t:
-            cur.execute(
-                "SELECT COUNT(*) AS n FROM family_record WHERE fid=%s AND pid!=%s",
-                (fid, pid)
-            )
-            is_existing = (cur.fetchone() or {}).get('n', 0) > 0
-            if is_existing and g_d:
-                try:
-                    deadline = g_d if not isinstance(g_d, str) else                         __import__('datetime').datetime.strptime(g_d, '%Y-%m-%d').date()
-                    if _date.today() <= deadline:
-                        eff_tuition = float(g_t)
-                except Exception:
-                    pass
-
-    # Fetch student class selections
-    cur.execute("""SELECT s.birthday,
-        COALESCE(cc.fee,0)  AS cult_fee,
-        COALESCE(cc2.fee,0) AS cult_fee2
+    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee
+    cur.execute("""SELECT s.birthday, sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+        COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
         FROM student s
         JOIN student_record sr ON sr.sid=s.id
         LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
         LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
-        WHERE s.fid=%s AND sr.pid=%s
-        AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
-        (fid, pid))
+        WHERE s.fid=%s AND sr.pid=%s""", (fid, pid))
     rows = cur.fetchall()
 
-    # Calculate new total
-    period_with_eff = {**period, 'tuition': eff_tuition}
-    subtotal = sum(
-        _calc_student_fee(
-            {'birthday': r['birthday']}, period_with_eff,
+    student_subtotal = 0.0
+    for r in rows:
+        student_subtotal += _calc_student_fee(
+            {'birthday': r['birthday']}, period,
             float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0)
-        ) for r in rows
-    )
-    new_total = _calc_total_family_fee(subtotal, period)
+        )
+    new_total = _calc_total_family_fee(student_subtotal, period)
 
+    cur.execute(
+        "SELECT id, total_due, reg_status, description FROM family_record "
+        "WHERE fid=%s AND pid=%s", (fid, pid)
+    )
+    fpr = cur.fetchone()
     if not fpr:
         return new_total, False
 
@@ -143,7 +108,6 @@ def _recalc_family_record(cur, fid, pid):
         cur.execute("UPDATE family_record SET total_due=%s, last_update=NOW() "
                     "WHERE id=%s", (new_total, fpr['id']))
         return new_total, False
-
 
 # ── login / logout ─────────────────────────────────────────────────────────────
 
@@ -1000,7 +964,7 @@ def finance():
         cur.execute(f"""SELECT f.id AS family_id,f.last_name_0,f.first_name_0,
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
-            fr.reg_status,fr.description,fr.last_update,fr.tuition_override,
+            fr.reg_status,fr.description,fr.last_update,
             COUNT(s.id) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
@@ -1037,91 +1001,6 @@ def finance_update():
     cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
     conn.commit(); conn.close(); flash('Payment updated.','success')
     return redirect(url_for('admin.finance', pid=pid))
-
-@admin_bp.route('/finance/switch-tuition', methods=['POST'])
-@roles_required('admin','finance')
-def switch_tuition():
-    """Toggle a family's tuition between standard and grandfathered for a period."""
-    fpr_id   = request.form.get('fpr_id')
-    pid      = request.form.get('pid')
-    new_rate = request.form.get('new_rate')  # 'standard' or 'grandfathered'
-    if not fpr_id or new_rate not in ('standard','grandfathered'):
-        flash('Invalid request.','error')
-        return redirect(url_for('admin.finance', pid=pid))
-
-    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT fr.*, p.tuition, p.grandfathered_tuition, p.grandfathered_deadline,"
-                " p.registration_fee, p.pa_assignment_deposit "
-                "FROM family_record fr JOIN period p ON p.id=fr.pid "
-                "WHERE fr.id=%s", (fpr_id,))
-    fpr = cur.fetchone()
-    if not fpr:
-        conn.close(); flash('Record not found.','error')
-        return redirect(url_for('admin.finance', pid=pid))
-
-    # Validate grandfathered rate is available for this period
-    if new_rate == 'grandfathered' and not fpr.get('grandfathered_tuition'):
-        conn.close(); flash('This period has no grandfathered tuition set.','warning')
-        return redirect(url_for('admin.finance', pid=pid))
-
-    # Determine new tuition amount
-    if new_rate == 'grandfathered':
-        eff_tuition = float(fpr['grandfathered_tuition'])
-    else:
-        eff_tuition = float(fpr['tuition'])
-
-    # Recalculate total_due with the new rate
-    period_for_calc = {
-        'id': fpr['pid'], 'tuition': eff_tuition,
-        'registration_fee': fpr['registration_fee'],
-        'pa_assignment_deposit': fpr['pa_assignment_deposit'],
-        'grandfathered_tuition': fpr.get('grandfathered_tuition'),
-        'grandfathered_deadline': fpr.get('grandfathered_deadline'),
-    }
-    from routes.family import _calc_student_fee, _calc_total_family_fee, _is_adult
-    cur.execute("""SELECT s.birthday, COALESCE(cc.fee,0) AS cult_fee,
-        COALESCE(cc2.fee,0) AS cult_fee2
-        FROM student_record sr JOIN student s ON s.id=sr.sid
-        LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
-        LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
-        WHERE sr.pid=%s AND s.fid=%s
-        AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
-        (fpr['pid'], fpr['fid']))
-    rows = cur.fetchall()
-
-    subtotal = sum(
-        _calc_student_fee({'birthday': r['birthday']}, period_for_calc,
-                          float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0))
-        for r in rows
-    )
-    new_total = _calc_total_family_fee(subtotal, period_for_calc)
-
-    # If fee changed and status was Complete, revert to Pending
-    old_total  = float(fpr['total_due'] or 0)
-    old_status = fpr['reg_status'] or 'Pending'
-    fee_changed = abs(new_total - old_total) > 0.01
-    new_status = old_status
-    note = fpr.get('description') or ''
-
-    if fee_changed and old_status == 'Complete Registration':
-        new_status = 'Pending'
-        label = 'grandfathered' if new_rate == 'grandfathered' else 'full'
-        note = (note + f' [Switched to {label} tuition ${eff_tuition:.2f},'
-                f' fee ${old_total:.2f}→${new_total:.2f} — review payment]')[:9999]
-        flash(f'Switched to {label} tuition. Fee changed ${old_total:.2f}→${new_total:.2f}.'
-              f' Status reset to Pending.', 'warning')
-    else:
-        label = 'grandfathered' if new_rate == 'grandfathered' else 'full'
-        flash(f'Switched to {label} tuition. Total due: ${new_total:.2f}.', 'success')
-
-    cur.execute(
-        "UPDATE family_record SET tuition_override=%s, total_due=%s, "
-        "reg_status=%s, description=%s, last_update=NOW() WHERE id=%s",
-        (new_rate, new_total, new_status, note, int(fpr_id))
-    )
-    conn.commit(); conn.close()
-    return redirect(url_for('admin.finance', pid=pid))
-
 
 # ══ FAMILIES ══════════════════════════════════════════════════════════════════
 
