@@ -18,12 +18,10 @@ class Family(UserMixin):
         self.primary_phone   = row.get('primary_phone', '')
         self.secondary_phone = row.get('secondary_phone', '')
         self.secondary_email = row.get('secondary_email', '')
-        self.street_address   = row.get('street_address', '')
-        self.city             = row.get('city', '')
-        self.state            = row.get('state', '')
-        self.zip              = row.get('zip', '')
-        self.address_verified = bool(row.get('address_verified', 0))
-        self.email_verified   = int(row.get('email_verified', 1))  # default 1 for legacy accounts
+        self.street_address  = row.get('street_address', '')
+        self.city            = row.get('city', '')
+        self.state           = row.get('state', '')
+        self.zip             = row.get('zip', '')
 
     @property
     def display_name(self):

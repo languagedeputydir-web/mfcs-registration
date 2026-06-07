@@ -35,10 +35,9 @@
         <th>Class Name</th>
         <th>Chinese Name</th>
         <th class="text-end">Fee</th>
-        <th class="text-end">MFCS Discount</th>
         <th>Teachers</th>
         <th>TAs</th>
-        <th class="text-center">Students<br><span class="fw-normal text-muted" style="font-size:.7rem">pending / assigned</span></th>
+        <th class="text-center">Students</th>
         <th>Facility</th>
         <th></th>
       </tr>
@@ -48,21 +47,10 @@
       <tr>
         <td class="fw-500">{{ c.name }}</td>
         <td class="text-muted">{{ c.chinese_name if c.chinese_name not in ('?','') else '—' }}</td>
-        <td class="text-end">${{ (c.fee or 0)|currency }}</td>
-        <td class="text-end">
-          {% if c.discount and c.discount|float > 0 %}
-          <span class="text-success">-${{ c.discount|float|currency }}</span>
-          {% else %}
-          <span class="text-muted">—</span>
-          {% endif %}
-        </td>
+        <td class="text-end">${{ "%.2f"|format(c.fee or 0) }}</td>
         <td class="small">{{ c.teachers if c.teachers else '—' }}</td>
         <td class="small">{{ c.tas if c.tas else '—' }}</td>
-        <td class="text-center">
-          <span title="{{ c.pending_count or 0 }} pending, {{ c.student_count or 0 }} assigned">
-            {{ c.pending_count or 0 }}/{{ c.student_count or 0 }}
-          </span>
-        </td>
+        <td class="text-center">{{ c.student_count or 0 }}</td>
         <td class="small text-muted">{{ c.facilities if c.facilities else '—' }}</td>
         <td>
           <a href="{{ url_for('admin.class_assignments', cgrid=c.id) }}"

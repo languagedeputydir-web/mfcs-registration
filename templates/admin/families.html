@@ -95,11 +95,11 @@
         </td>
         <td class="text-end small">
           {% if f.total_due %}
-          ${{ f.total_due|currency }} /
-          ${{ (f.total_paid or 0)|currency }}
+          ${{ "%.2f"|format(f.total_due) }} /
+          ${{ "%.2f"|format(f.total_paid or 0) }}
           {% set balance = (f.total_due or 0)|float - (f.total_paid or 0)|float - (f.adjustment or 0)|float %}
           {% if balance > 0.01 %}
-          <span class="text-danger">(owe ${{ balance|currency }})</span>
+          <span class="text-danger">(owe ${{ "%.2f"|format(balance) }})</span>
           {% endif %}
           {% else %}—{% endif %}
         </td>

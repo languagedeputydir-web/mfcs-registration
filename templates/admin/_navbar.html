@@ -22,8 +22,6 @@
     {% endif %}
     {% if current_user.is_language or current_user.is_culture %}
     <a class="nav-link" href="{{ url_for('admin.staff_list') }}">Teachers/TAs</a>
-    {% endif %}
-    {% if current_user.is_admin or current_user.is_language or current_user.is_culture %}
     <a class="nav-link" href="{{ url_for('admin.facility_list') }}">Facilities</a>
     {% endif %}
     {% if current_user.is_finance %}
@@ -31,12 +29,10 @@
     <a class="nav-link" href="{{ url_for('admin.families') }}">Families</a>
     {% endif %}
     <a class="nav-link" href="{{ url_for('admin.students') }}">Students</a>
-    <a class="nav-link text-white-50 small border-start ps-3"
-       href="{{ url_for('admin.my_profile') }}"
-       style="text-decoration:none">
-      {{ current_user.display_name or current_user.username }}
+    <span class="text-white-50 small border-start ps-3">
+      {{ current_user.display_name }}
       <span class="badge bg-secondary ms-1" style="font-size:.65rem">{{ current_user.role }}</span>
-    </a>
+    </span>
     <a class="nav-link text-white-50" href="{{ url_for('admin.logout') }}">Sign out</a>
   </div>
 </nav>

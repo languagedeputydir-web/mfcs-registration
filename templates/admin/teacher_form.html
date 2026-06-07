@@ -60,7 +60,7 @@
         <input type="tel" name="phone" class="form-control" required
                value="{{ teacher.phone if teacher and teacher.phone != '?' else '' }}"
                placeholder="e.g. 732-555-1234"
-               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+               pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
                title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
       </div>
       <div class="col-6">

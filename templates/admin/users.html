@@ -45,16 +45,6 @@
         <td>
           <a href="{{ url_for('admin.edit_user', uid=u.id) }}"
              class="btn btn-sm btn-outline-secondary">Edit</a>
-          {% if u.id != current_user.id %}
-          <form method="post" action="{{ url_for('admin.delete_user', uid=u.id) }}"
-                class="d-inline"
-                onsubmit="return confirm('Remove user {{ u.username }}? This cannot be undone.')">
-            <button type="submit" class="btn btn-sm btn-outline-danger ms-1">Remove</button>
-          </form>
-          {% else %}
-          <span class="btn btn-sm btn-outline-secondary ms-1 disabled text-muted"
-                title="You cannot remove your own account">Remove</span>
-          {% endif %}
         </td>
       </tr>
       {% else %}

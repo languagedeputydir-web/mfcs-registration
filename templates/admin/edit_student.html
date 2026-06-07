@@ -4,161 +4,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="mb-0">Edit Student</h2>
-  <a href="{{ url_for('admin.students', pid=pid or None, lang=lang or None, cult=cult or None) }}"
-     class="btn btn-outline-secondary btn-sm">← Students</a>
+  <a href="{{ url_for('admin.students', pid=pid or None, lang=lang or None, cult=cult or None) }}" class="btn btn-outline-secondary btn-sm">← Students</a>
 </div>
 
-{% if culture_only %}
-{# ══ CULTURE ROLE — culture class selection only ══ #}
-<div class="card p-4 mb-3" style="max-width:580px;border-left:4px solid #8e44ad">
-  <div class="small text-muted mb-3">
-    <strong>{{ student.last_name }}, {{ student.first_name }}</strong>
-    {% if student.chinese_name and student.chinese_name != '?' %}· {{ student.chinese_name }}{% endif %}
-    &nbsp;·&nbsp; {{ period.name }}
-  </div>
-
-  {# ── Read-only student info ── #}
-  <h6 class="text-uppercase text-muted small fw-600 mb-2" style="letter-spacing:.05em">Student Information</h6>
-  <div class="row g-2 mb-3 small">
-    <div class="col-6"><span class="text-muted">First Name</span><div class="fw-500">{{ student.first_name if student.first_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Last Name</span><div class="fw-500">{{ student.last_name if student.last_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Chinese Name</span><div class="fw-500">{{ student.chinese_name if student.chinese_name and student.chinese_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Gender</span><div class="fw-500">{{ student.gender if student.gender and student.gender != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Date of Birth</span><div class="fw-500">{{ student.birthday if student.birthday and student.birthday|string not in ('2999-01-01','None') else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Phone</span><div class="fw-500">{{ student.phone if student.phone and student.phone != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Email</span><div class="fw-500">{{ student.email if student.email and student.email not in ('?','') else '—' }}</div></div>
-  </div>
-  <h6 class="text-uppercase text-muted small fw-600 mb-2 mt-1" style="letter-spacing:.05em">Emergency Contact</h6>
-  <div class="row g-2 mb-3 small">
-    <div class="col-6"><span class="text-muted">Name</span><div class="fw-500">{{ (student.ec_first_name ~ ' ' ~ student.ec_last_name)|trim if student.ec_first_name and student.ec_first_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Phone</span><div class="fw-500">{{ student.ec_phone if student.ec_phone and student.ec_phone != '?' else '—' }}</div></div>
-  </div>
-  {% if student.special_note %}
-  <h6 class="text-uppercase text-muted small fw-600 mb-2 mt-1" style="letter-spacing:.05em">Special Notes</h6>
-  <div class="small mb-3">{{ student.special_note }}</div>
-  {% endif %}
-  <hr class="my-3">
-
-  {% if student_record.ccgrid or student_record.ccgrid2 %}
-  <div class="alert alert-info py-2 small mb-3">
-    <strong>Current selection:</strong>
-    Culture 1: <strong>{{ student_record.cult_class_name if student_record.cult_class_name else '—' }}</strong>
-    &nbsp;·&nbsp;
-    Culture 2: <strong>{{ student_record.cult_class2_name if student_record.cult_class2_name else '—' }}</strong><br>
-    <span class="text-muted">If the student is officially assigned to a section, changing the class will remove that assignment.</span>
-  </div>
-  {% endif %}
-
-  <form method="post">
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">🎭 Culture Classes</h6>
-    <div class="mb-3">
-      <label class="form-label small fw-500">Culture Class 1</label>
-      <select name="ccgrid" id="ccgrid" class="form-select" onchange="enforceCultureRule()">
-        <option value="">— None —</option>
-        {% for c in cult_classes %}
-        <option value="{{ c.id }}" {{ 'selected' if student_record.ccgrid == c.id }}>
-          {{ c.name }}{% if c.fee %} (+${{ "%.2f"|format(c.fee) }}){% endif %}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="mb-4">
-      <label class="form-label small fw-500">Culture Class 2</label>
-      <select name="ccgrid2" id="ccgrid2" class="form-select">
-        <option value="">— None —</option>
-        {% for c in cult_classes %}
-        <option value="{{ c.id }}" {{ 'selected' if student_record.ccgrid2 == c.id }}>
-          {{ c.name }}{% if c.fee %} (+${{ "%.2f"|format(c.fee) }}){% endif %}
-        </option>
-        {% endfor %}
-      </select>
-      <div id="cult2-warning" class="text-danger small mt-1" style="display:none">
-        Culture Class 1 must be selected before choosing Culture Class 2.
-      </div>
-      <div class="form-text">Leave blank if the student is not taking a second culture class.</div>
-    </div>
-    <div class="alert alert-warning py-2 small">
-      ⚠ If the new class fee differs from the amount already collected, the registration
-      will automatically be set back to <strong>Pending</strong> for finance review.
-    </div>
-    <input type="hidden" name="_pid"  value="{{ pid or '' }}">
-    <input type="hidden" name="_cult" value="{{ cult or '' }}">
-    <div class="d-flex gap-2 mt-3">
-      <button type="submit" class="btn btn-admin px-4">Save Culture Classes</button>
-      <a href="{{ url_for('admin.students', pid=pid or None, lang=lang or None, cult=cult or None) }}"
-         class="btn btn-outline-secondary">Cancel</a>
-    </div>
-  </form>
-</div>
-
-{% elif language_only %}
-{# ══ LANGUAGE ROLE — language class selection only ══ #}
-<div class="card p-4 mb-3" style="max-width:580px;border-left:4px solid #2980b9">
-  <div class="small text-muted mb-3">
-    <strong>{{ student.last_name }}, {{ student.first_name }}</strong>
-    {% if student.chinese_name and student.chinese_name != '?' %}· {{ student.chinese_name }}{% endif %}
-    &nbsp;·&nbsp; {{ period.name }}
-  </div>
-
-  {# ── Read-only student info ── #}
-  <h6 class="text-uppercase text-muted small fw-600 mb-2" style="letter-spacing:.05em">Student Information</h6>
-  <div class="row g-2 mb-3 small">
-    <div class="col-6"><span class="text-muted">First Name</span><div class="fw-500">{{ student.first_name if student.first_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Last Name</span><div class="fw-500">{{ student.last_name if student.last_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Chinese Name</span><div class="fw-500">{{ student.chinese_name if student.chinese_name and student.chinese_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Gender</span><div class="fw-500">{{ student.gender if student.gender and student.gender != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Date of Birth</span><div class="fw-500">{{ student.birthday if student.birthday and student.birthday|string not in ('2999-01-01','None') else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Phone</span><div class="fw-500">{{ student.phone if student.phone and student.phone != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Email</span><div class="fw-500">{{ student.email if student.email and student.email not in ('?','') else '—' }}</div></div>
-  </div>
-  <h6 class="text-uppercase text-muted small fw-600 mb-2 mt-1" style="letter-spacing:.05em">Emergency Contact</h6>
-  <div class="row g-2 mb-3 small">
-    <div class="col-6"><span class="text-muted">Name</span><div class="fw-500">{{ (student.ec_first_name ~ ' ' ~ student.ec_last_name)|trim if student.ec_first_name and student.ec_first_name != '?' else '—' }}</div></div>
-    <div class="col-6"><span class="text-muted">Phone</span><div class="fw-500">{{ student.ec_phone if student.ec_phone and student.ec_phone != '?' else '—' }}</div></div>
-  </div>
-  {% if student.special_note %}
-  <h6 class="text-uppercase text-muted small fw-600 mb-2 mt-1" style="letter-spacing:.05em">Special Notes</h6>
-  <div class="small mb-3">{{ student.special_note }}</div>
-  {% endif %}
-  <hr class="my-3">
-
-  {% if student_record.lcgrid %}
-  <div class="alert alert-info py-2 small mb-3">
-    <strong>Current selection:</strong>
-    Language: <strong>{{ student_record.lang_class_name if student_record.lang_class_name else '—' }}</strong><br>
-    <span class="text-muted">If the student is officially assigned to a section, changing the class will remove that assignment.</span>
-  </div>
-  {% endif %}
-
-  <form method="post">
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">📚 Language Class</h6>
-    <div class="mb-4">
-      <label class="form-label small fw-500">Language Class</label>
-      <select name="lcgrid" class="form-select" required>
-        <option value="">— Select a language class —</option>
-        {% for c in lang_classes %}
-        <option value="{{ c.id }}" {{ 'selected' if student_record.lcgrid == c.id }}>
-          {{ c.name }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="alert alert-warning py-2 small">
-      ⚠ If the new class fee differs from the amount already collected, the registration
-      will automatically be set back to <strong>Pending</strong> for finance review.
-    </div>
-    <input type="hidden" name="_pid"  value="{{ pid or '' }}">
-    <input type="hidden" name="_lang" value="{{ lang or '' }}">
-    <div class="d-flex gap-2 mt-3">
-      <button type="submit" class="btn btn-admin px-4">Save Language Class</button>
-      <a href="{{ url_for('admin.students', pid=pid or None, lang=lang or None, cult=cult or None) }}"
-         class="btn btn-outline-secondary">Cancel</a>
-    </div>
-  </form>
-</div>
-
-{% else %}
-{# ══ FULL EDIT — admin / language / finance ══ #}
 <div class="card p-4" style="max-width:580px">
   <form method="post">
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Student Information</h6>
@@ -199,8 +47,8 @@
         <label class="form-label small fw-500">Phone</label>
         <input type="tel" name="phone" class="form-control"
                value="{{ student.phone if student.phone != '?' else '' }}"
-               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
-               title="Enter a valid phone number with area code (e.g. 732-555-1234)">
+               pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
       </div>
       <div class="col-6">
         <label class="form-label small fw-500">Email</label>
@@ -225,36 +73,14 @@
       <label class="form-label small fw-500">Emergency Phone</label>
       <input type="tel" name="ec_phone" class="form-control"
              value="{{ student.ec_phone if student.ec_phone != '?' else '' }}"
-             pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
-             title="Enter a valid phone number with area code (e.g. 732-555-1234)">
+               pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
     </div>
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Special Notes</h6>
     <div class="mb-4">
       <textarea name="special_note" rows="4" class="form-control"
                 placeholder="Medical conditions, allergies, photo/social media permission, etc.">{{ student.special_note or '' }}</textarea>
       <div class="form-text">Visible to all admin users.</div>
-    </div>
-
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Media Consent</h6>
-    <div class="mb-4">
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" name="media_consent"
-               id="media_consent_toggle" value="1"
-               {% if student.media_consent != 0 %}checked{% endif %}>
-        <label class="form-check-label" for="media_consent_toggle">
-          {% if student.media_consent == 0 %}
-          <span class="badge bg-danger">OPT-OUT</span> Student has opted out of media sharing
-          {% else %}
-          <span class="badge bg-success">OPT-IN</span> Student has consented to media sharing
-          {% endif %}
-        </label>
-      </div>
-      <div class="form-text">
-        Toggle to opt this student in or out of photography &amp; media sharing.
-        Families can only opt out by emailing
-        <a href="mailto:principal@mfcsnj.org">principal@mfcsnj.org</a> —
-        this toggle should only be changed upon receipt of that request.
-      </div>
     </div>
     <input type="hidden" name="_pid"  value="{{ pid or '' }}">
     <input type="hidden" name="_lang" value="{{ lang or '' }}">
@@ -266,46 +92,4 @@
     </div>
   </form>
 </div>
-{% endif %}
-{% if culture_only %}
-<script>
-function enforceCultureRule() {
-  const c1 = document.getElementById('ccgrid');
-  const c2 = document.getElementById('ccgrid2');
-  const warn = document.getElementById('cult2-warning');
-  // Clear C2 if C1 is empty
-  if (!c1.value && c2.value) {
-    c2.value = '';
-  }
-  // Clear C2 if it matches C1
-  if (c1.value && c2.value && c1.value === c2.value) {
-    c2.value = '';
-    warn.textContent = 'Culture Class 2 cannot be the same as Culture Class 1.';
-    warn.style.display = 'block';
-    return;
-  }
-  warn.textContent = 'Culture Class 1 must be selected before choosing Culture Class 2.';
-  warn.style.display = (!c1.value) ? 'block' : 'none';
-}
-document.getElementById('ccgrid2').addEventListener('change', enforceCultureRule);
-document.querySelector('form').addEventListener('submit', function(e) {
-  const c1 = document.getElementById('ccgrid');
-  const c2 = document.getElementById('ccgrid2');
-  const warn = document.getElementById('cult2-warning');
-  if (!c1.value && c2.value) {
-    e.preventDefault();
-    warn.textContent = 'Culture Class 1 must be selected before choosing Culture Class 2.';
-    warn.style.display = 'block';
-    c2.focus();
-    return;
-  }
-  if (c1.value && c2.value && c1.value === c2.value) {
-    e.preventDefault();
-    warn.textContent = 'Culture Class 2 cannot be the same as Culture Class 1.';
-    warn.style.display = 'block';
-    c2.focus();
-  }
-});
-</script>
-{% endif %}
 {% endblock %}

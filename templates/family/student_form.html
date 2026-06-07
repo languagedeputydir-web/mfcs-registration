@@ -1,14 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Student Detail' if action == 'edit' else 'Add Student' }} — MFCS
-<script>
-document.addEventListener('DOMContentLoaded', function() {
+{% block title %}{{ 'Edit Student' if action == 'edit' else 'Add Student' }} — MFCS<script>
+// Phone format validation (only if value entered)
+document.querySelector('form').addEventListener('submit', function(e) {
   const phone = document.getElementById('phone_field');
-  if (phone) {
-    document.querySelector('form').addEventListener('submit', function(e) {
-      if (phone.value.trim() && !phone.checkValidity()) {
-        phone.classList.add('is-invalid'); e.preventDefault();
-      } else { phone.classList.remove('is-invalid'); }
-    });
+  if (phone && phone.value.trim() && !phone.checkValidity()) {
+    phone.classList.add('is-invalid');
+    e.preventDefault();
+  } else if (phone) {
+    phone.classList.remove('is-invalid');
   }
 });
 </script>
@@ -17,16 +16,15 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="mb-0">{{ 'Student Detail' if action == 'edit' else 'Add New Student' }}</h2>
+  <h2 class="mb-0">{{ 'Edit Student' if action == 'edit' else 'Add New Student' }}</h2>
   <a href="{{ url_for('family.students') }}" class="btn btn-outline-secondary btn-sm">← My Students</a>
 </div>
 
-<div class="card p-4" style="max-width:620px">
+<div class="card p-4" style="max-width:580px">
   <form method="post" action="
     {{- url_for('family.edit_student', student_id=student.id) if action == 'edit'
         else url_for('family.new_student') -}}">
 
-    {# ── Student Info ── #}
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Student Information</h6>
     <div class="row g-2 mb-3">
       <div class="col-6">
@@ -55,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </select>
       </div>
       <div class="col-6">
-        <label class="form-label small fw-500">Date of Birth</label>
+        <label class="form-label small fw-500">Date of Birth <span class="text-muted fw-400">(affects tuition)</span></label>
         <input type="date" name="birthday" class="form-control"
                value="{{ student.birthday if student and student.birthday|string not in ('2999-01-01','None') else '' }}">
       </div>
@@ -66,136 +64,44 @@ document.addEventListener('DOMContentLoaded', function() {
         <input type="tel" name="phone" id="phone_field" class="form-control"
                value="{{ student.phone if student and student.phone != '?' else '' }}"
                placeholder="e.g. 732-555-1234"
-               pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+               pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
                title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
         <div class="invalid-feedback">Please enter a valid phone number.</div>
       </div>
       <div class="col-6">
         <label class="form-label small fw-500">Email</label>
         <input type="email" name="email" class="form-control"
-               value="{{ student.email if student and student.email and student.email not in ('?','') and not student.email.endswith('@placeholder.invalid') else '' }}"
+               value="{{ student.email if student and student.email not in ('?','') else '' }}"
                title="Enter a valid email address">
       </div>
     </div>
 
-    {# ── Emergency Contact ── #}
     <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Emergency Contact</h6>
     <div class="row g-2 mb-3">
       <div class="col-6">
         <label class="form-label small fw-500">First Name</label>
         <input type="text" name="ec_first_name" class="form-control"
-               value="{{ student.ec_first_name if student and student.ec_first_name != '?' else (family.first_name_0 if action == 'new' and family else '') }}">
+               value="{{ student.ec_first_name if student and student.ec_first_name != '?' else '' }}">
       </div>
       <div class="col-6">
         <label class="form-label small fw-500">Last Name</label>
         <input type="text" name="ec_last_name" class="form-control"
-               value="{{ student.ec_last_name if student and student.ec_last_name != '?' else (family.last_name_0 if action == 'new' and family else '') }}">
+               value="{{ student.ec_last_name if student and student.ec_last_name != '?' else '' }}">
       </div>
     </div>
     <div class="mb-4">
       <label class="form-label small fw-500">Phone</label>
       <input type="tel" name="ec_phone" class="form-control"
-             value="{{ student.ec_phone if student and student.ec_phone != '?' else (family.primary_phone if action == 'new' and family else '') }}"
-             placeholder="e.g. 732-555-1234"
-             pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
-             title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
+             value="{{ student.ec_phone if student and student.ec_phone != '?' else '' }}"
+               pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
+               title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
     </div>
 
-    {# ── Student Type ── #}
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Student Type</h6>
-    <div class="mb-3">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="is_adult" id="is_adult_0"
-               value="0" onchange="toggleAdultFields()"
-               {% if not student or not student.is_adult %}checked{% endif %}>
-        <label class="form-check-label" for="is_adult_0">Non-adult Student</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="is_adult" id="is_adult_1"
-               value="1" onchange="toggleAdultFields()"
-               {% if student and student.is_adult %}checked{% endif %}>
-        <label class="form-check-label" for="is_adult_1">Adult Student</label>
-      </div>
-    </div>
-    <div id="affiliation_section" class="mb-4" style="display:{{ 'block' if student and student.is_adult else 'none' }}">
-      <label class="form-label small fw-500">MFCS Affiliation <span class="text-danger">*</span></label>
-      <select name="mfcs_affiliation" class="form-select" id="mfcs_affiliation">
-        <option value="">— Select —</option>
-        <option value="Y" {% if student and student.mfcs_affiliation == 'Y' %}selected{% endif %}>
-          MFCS Affiliation (Current Parents/Grandparents, Board Members, Alumni)
-        </option>
-        <option value="N" {% if student and student.mfcs_affiliation == 'N' %}selected{% endif %}>
-          Non-MFCS Affiliation (General Public / Others)
-        </option>
-      </select>
-    </div>
-
-    {# ── Medical Conditions ── #}
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Medical Conditions</h6>
+    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Special Notes</h6>
     <div class="mb-4">
       <textarea name="special_note" rows="3" class="form-control"
-                placeholder="List any medical conditions, allergies, or other health information administrators should know about.">{{ student.special_note if student and student.special_note else '' }}</textarea>
+                placeholder="Medical conditions, allergies, photo/social media permission, etc.">{{ student.special_note if student and student.special_note else '' }}</textarea>
       <div class="form-text">This information is visible to school administrators.</div>
-    </div>
-
-    {# ── Media Consent ── #}
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Photography &amp; Media Consent</h6>
-
-    {% if student and student.media_consent == 0 %}
-    {# Student has been opted out by admin #}
-    <div class="card border-danger mb-3 p-3">
-      <div class="d-flex align-items-center gap-2 mb-2">
-        <span class="badge bg-danger">OPT-OUT</span>
-        <span class="fw-600">This student has opted out of media sharing.</span>
-      </div>
-      <div class="small text-muted">
-        This student's image and voice will not be posted to official websites, Facebook,
-        or any other school-managed social media platforms or publications.<br><br>
-        To reverse this decision, please email
-        <a href="mailto:principal@mfcsnj.org">principal@mfcsnj.org</a>.
-      </div>
-    </div>
-    {# Hidden field to preserve opt-out status #}
-    <input type="hidden" name="media_consent" value="0">
-
-    {% else %}
-    {# Default: opted in — show consent text and opt-in radio #}
-    <div class="card border mb-3 p-3">
-      <div class="form-check mb-2">
-        <input class="form-check-input" type="radio" name="media_consent" id="media_optin"
-               value="1" checked required>
-        <label class="form-check-label fw-600" for="media_optin">
-          OPT-IN (I Consent)
-        </label>
-      </div>
-      <div class="small text-muted" style="padding-left:1.5rem">
-        <p class="mb-2">For my (or my child's) participation in activities sponsored by or related to MONMOUTH FIDELITY CHINESE SCHOOL, I hereby give my permission and consent, now and for all time (without any further compensation, claim or demand by me) to Monmouth Fidelity Chinese School, its advertising agencies, entities and third parties collaborating with Monmouth Fidelity Chinese School and their representatives, if any (the "Organizations") to make, reproduce, edit, broadcast or rebroadcast any video film, footage and other sound track recordings, or photo reproductions of me/my child, and my narrative account of my experience with Monmouth Fidelity Chinese School activities ("Materials") for publication, display, sale or exhibition thereof in promotions, advertising and legitimate business uses without any further compensation. I/my child may or may not be identified in such reproduction, however we shall not be stated by name to have endorsed any particular commercial products or commercial services.</p>
-        <p class="mb-1">By selecting this option, I further agree to the following:</p>
-        <ul class="mb-0">
-          <li>Any Materials that I authorize pursuant to this Release shall belong to Monmouth Fidelity Chinese School as its property, with full right of disposition of them.</li>
-          <li>The Materials will not be subject to any obligation of confidentiality and may be shared with and used by the Organizations, as well as with any third parties as Monmouth Fidelity Chinese School may elect.</li>
-          <li>Monmouth Fidelity Chinese School shall not be liable for any use or disclosure to a third party of any of the Materials.</li>
-          <li>Monmouth Fidelity Chinese School shall exclusively own all known or later existing rights to the Materials worldwide and shall be entitled to the unrestricted use of the Materials for any purpose without compensation to the provider of Materials.</li>
-          <li>I agree that my consent and this release is irrevocable. I hereby release and discharge the Organizations and their representatives from any and all claims in connection with the uses and reproductions of my/my child's image and voice and narrative account as described herein.</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="alert alert-info small mb-3">
-      <strong>To opt out</strong> of media sharing for this student, please send an email to
-      <a href="mailto:principal@mfcsnj.org"><strong>principal@mfcsnj.org</strong></a>
-      with your student's name and your request. The school will update this status upon receipt.
-    </div>
-    {% endif %}
-
-    <div class="alert alert-warning small mb-4" role="alert">
-      <strong>IMPORTANT NOTICE REGARDING OPEN EVENTS</strong> (Applies to all students, regardless of selection above):<br>
-      Monmouth Fidelity Chinese School respects your privacy and will strictly adhere to your choice above
-      regarding the posting of media on our official platforms. However, please be aware that during open
-      or public school events, third parties (such as other parents, guests, or outside organizations) may
-      take photographs or videos. Monmouth Fidelity Chinese School has no control over the actions of third
-      parties and assumes no responsibility or liability for how they may use, publish, or distribute any
-      images or recordings taken during these open events.
     </div>
 
     <div class="d-flex gap-2">
@@ -206,24 +112,4 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </form>
 </div>
-<script>
-function toggleAdultFields() {
-  const isAdult = document.getElementById('is_adult_1').checked;
-  const section = document.getElementById('affiliation_section');
-  const select  = document.getElementById('mfcs_affiliation');
-  section.style.display = isAdult ? 'block' : 'none';
-  select.required = isAdult;
-  if (!isAdult) select.value = '';
-}
-// Validate affiliation on submit
-document.querySelector('form').addEventListener('submit', function(e) {
-  const isAdult = document.getElementById('is_adult_1').checked;
-  const aff = document.getElementById('mfcs_affiliation').value;
-  if (isAdult && !aff) {
-    e.preventDefault();
-    document.getElementById('mfcs_affiliation').classList.add('is-invalid');
-    document.getElementById('mfcs_affiliation').focus();
-  }
-});
-</script>
 {% endblock %}
