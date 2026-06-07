@@ -574,6 +574,34 @@ def register_classes(period_id):
     for s in students:
         s['_is_adult'] = _is_adult(s)
 
+    # Build a fee map for JS live calculator: {class_id: fee}
+    cult_fee_map = {str(c['id']): float(c.get('fee') or 0) for c in all_cult_classes}
+
+    # Determine effective tuition for this family (grandfathered vs standard)
+    conn2 = get_db_connection()
+    eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn2)
+    # Check if existing registration implies grandfathered rate
+    fpr_check = None
+    cur2 = conn2.cursor(dictionary=True)
+    cur2.execute("SELECT total_due FROM family_record WHERE fid=%s AND pid=%s",
+                 (current_user.id, period_id))
+    fpr_check = cur2.fetchone()
+    conn2.close()
+    if fpr_check and fpr_check.get('total_due') and period.get('grandfathered_tuition'):
+        saved = float(fpr_check['total_due'])
+        gf  = float(period['grandfathered_tuition'])
+        std = float(period.get('tuition') or 0)
+        # Rough back-calc: if implied tuition is near grandfathered, use it
+        student_count = len([s for s in students if not _is_adult(s)])
+        cult_total_approx = 0.0
+        if student_count > 0:
+            reg = float(period.get('registration_fee') or 0)
+            pa  = float(period.get('pa_assignment_deposit') or 0)
+            implied = (saved - pa - reg) / max(student_count, 1)
+            if abs(implied - gf) <= 30:   # within $30 of grandfathered
+                eff_tuition = gf
+                tuition_type = 'grandfathered'
+
     return render_template('family/register.html',
                            period=period,
                            students=students,
@@ -582,7 +610,10 @@ def register_classes(period_id):
                            cult_classes_minor=cult_classes_minor,
                            cult_classes_second_minor=cult_classes_second_minor,
                            cult_classes_second=cult_classes_second,
-                           existing=existing)
+                           existing=existing,
+                           cult_fee_map=cult_fee_map,
+                           eff_tuition=eff_tuition,
+                           tuition_type=tuition_type)
 
 
 @family_bp.route('/register/<int:period_id>/submit', methods=['POST'])
@@ -604,9 +635,9 @@ def submit_registration(period_id):
     cult_fee_map = {r['id']: float(r['fee']) for r in cur.fetchall()}
 
     # Determine effective tuition.
-    # If the family already has a saved registration, check whether their stored
-    # total_due implies the grandfathered rate — if so, keep using it regardless
-    # of whether the deadline has since passed.
+    # If the family already has a saved registration, use the OLD student_records
+    # to back-calculate the tuition rate actually used — preserving grandfathered
+    # rate even after the deadline and even when class selections change.
     cur.execute(
         "SELECT id, total_due, reg_status, description FROM family_record "
         "WHERE fid=%s AND pid=%s", (current_user.id, period_id)
@@ -614,23 +645,47 @@ def submit_registration(period_id):
     _existing_fpr = cur.fetchone()
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn)
 
-    if _existing_fpr and _existing_fpr.get('total_due'):
-        _gf = period.get('grandfathered_tuition')
+    if _existing_fpr and _existing_fpr.get('total_due') and float(_existing_fpr.get('total_due') or 0) > 0.01:
+        _gf  = period.get('grandfathered_tuition')
         _std = float(period.get('tuition') or 0)
         if _gf:
-            # Count minors and culture fees in current selection
-            _minor_c = sum(1 for s in students.values()
-                          if not _is_adult(s))
-            _cult_t = sum(cult_fee_amount.get(s_id, 0.0) + cult_fee_amount2.get(s_id, 0.0)
-                         for s_id in students)
-            _reg = float(period.get('registration_fee') or 0)
-            _pa  = float(period.get('pa_assignment_deposit') or 0)
+            # Use OLD student_records (pre-submit) to back-calculate tuition rate
+            cur.execute("""SELECT COALESCE(cc.fee,0) AS cult_fee,
+                COALESCE(cc2.fee,0) AS cult_fee2
+                FROM student_record sr
+                JOIN student s ON s.id=sr.sid
+                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+                WHERE s.fid=%s AND sr.pid=%s""", (current_user.id, period_id))
+            # Fetch OLD student_records: culture fees AND birthday for minor count.
+            # Using OLD records (not current family list) handles the case where a
+            # new member is added after the deadline — saved total reflects fewer students.
+            cur.execute("""SELECT s.birthday,
+                COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
+                FROM student_record sr JOIN student s ON s.id=sr.sid
+                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+                WHERE s.fid=%s AND sr.pid=%s
+                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
+                     OR sr.ccgrid2 IS NOT NULL)""",
+                (current_user.id, period_id))
+            _old_rows   = cur.fetchall()
+            _old_cult_t = sum(float(r.get('cult_fee') or 0) + float(r.get('cult_fee2') or 0)
+                              for r in _old_rows)
+            _old_minor_c = sum(1 for r in _old_rows if not _is_adult(r))
+            _reg   = float(period.get('registration_fee') or 0)
+            _pa    = float(period.get('pa_assignment_deposit') or 0)
             _saved = float(_existing_fpr['total_due'])
-            if _minor_c > 0:
-                _implied = (_saved - _cult_t - _reg - _pa) / _minor_c
+            if _old_minor_c > 0:
+                _implied = (_saved - _old_cult_t - _reg - _pa) / _old_minor_c
                 if abs(_implied - float(_gf)) <= 1.0:
                     eff_tuition  = float(_gf)
-                    tuition_type = 'grandfathered' 
+                    tuition_type = 'grandfathered'
+                elif abs(_implied - _std) <= 1.0:
+                    eff_tuition  = _std
+                    tuition_type = 'standard'
+                # else: unusual amount — keep _effective_tuition result
+
     student_subtotal = 0.0
 
     for sid, student in students.items():
