@@ -14,7 +14,7 @@
     </div>
 
     <div class="card p-4">
-      <form method="post" action="{{ url_for('family.register_account') }}" autocomplete="off">
+      <form method="post" action="{{ url_for('family.register_account') }}">
 
         <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">
           Primary Guardian
@@ -63,8 +63,7 @@
           <label class="form-label small fw-500">Email Address * <span class="text-muted fw-400">(used to log in)</span></label>
           <input type="email" name="primary_email"
                  class="form-control {{ 'is-invalid' if field_errors and field_errors.get('primary_email') }}"
-                 value="{{ form.primary_email if form else '' }}"
-                 autocomplete="off" required>
+                 value="{{ form.primary_email if form else '' }}" required>
           {% if field_errors and field_errors.get('primary_email') %}
           <div class="invalid-feedback">{{ field_errors.primary_email }}</div>
           {% endif %}
@@ -75,7 +74,7 @@
                  class="form-control {{ 'is-invalid' if field_errors and field_errors.get('primary_phone') }}"
                  value="{{ form.primary_phone if form else '' }}"
                  required placeholder="e.g. 732-555-1234"
-                 pattern="\+?[0-9]{0,1}[\s.-]?\(?[0-9]{3}\)?[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"
+                 pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
                  title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
           {% if field_errors and field_errors.get('primary_phone') %}
           <div class="invalid-feedback">{{ field_errors.primary_phone }}</div>
@@ -84,34 +83,26 @@
 
         <div class="row g-2 mb-3">
           <div class="col-8">
-            <label class="form-label small fw-500">Street Address <span class="text-danger">*</span></label>
-            <input type="text" name="street_address" class="form-control {{ 'is-invalid' if field_errors and field_errors.get('street_address') }}"
-                   value="{{ form.street_address if form else '' }}"
-                   autocomplete="off"
-                   placeholder="e.g. 123 Main St" required>
-            {% if field_errors and field_errors.get('street_address') %}
-            <div class="invalid-feedback">{{ field_errors.street_address }}</div>
-            {% endif %}
+            <label class="form-label small fw-500">Street Address</label>
+            <input type="text" name="street_address" class="form-control"
+                   value="{{ form.street_address if form else '' }}">
           </div>
           <div class="col-4">
-            <label class="form-label small fw-500">City <span class="text-danger">*</span></label>
+            <label class="form-label small fw-500">City</label>
             <input type="text" name="city" class="form-control"
-                   value="{{ form.city if form else '' }}"
-                   placeholder="e.g. Freehold" required>
+                   value="{{ form.city if form else '' }}">
           </div>
         </div>
         <div class="row g-2 mb-4">
           <div class="col-4">
-            <label class="form-label small fw-500">State <span class="text-danger">*</span></label>
+            <label class="form-label small fw-500">State</label>
             <input type="text" name="state" class="form-control" maxlength="2"
-                   value="{{ form.state if form else 'NJ' }}"
-                   placeholder="NJ" pattern="[A-Za-z]{2}" required>
+                   value="{{ form.state if form else 'NJ' }}">
           </div>
           <div class="col-4">
-            <label class="form-label small fw-500">ZIP <span class="text-danger">*</span></label>
+            <label class="form-label small fw-500">ZIP</label>
             <input type="text" name="zip" class="form-control"
-                   value="{{ form.zip if form else '' }}"
-                   placeholder="e.g. 07728" pattern="\d{5}(-\d{4})?" inputmode="numeric" required>
+                   value="{{ form.zip if form else '' }}">
           </div>
         </div>
 
@@ -123,7 +114,6 @@
           <div class="input-group {{ 'has-validation' if field_errors and field_errors.get('password') }}">
             <input type="password" name="password" id="pw1"
                    class="form-control {{ 'is-invalid' if field_errors and field_errors.get('password') }}"
-                   autocomplete="new-password"
                    required minlength="8">
             <button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw1')" tabindex="-1">👁</button>
             {% if field_errors and field_errors.get('password') %}
@@ -136,7 +126,6 @@
           <div class="input-group {{ 'has-validation' if field_errors and field_errors.get('confirm_password') }}">
             <input type="password" name="confirm_password" id="pw2"
                    class="form-control {{ 'is-invalid' if field_errors and field_errors.get('confirm_password') }}"
-                   autocomplete="new-password"
                    required minlength="8">
             <button type="button" class="btn btn-outline-secondary" onclick="togglePw('pw2')" tabindex="-1">👁</button>
             {% if field_errors and field_errors.get('confirm_password') %}

@@ -90,22 +90,22 @@
     <div class="row g-2 mb-3">
       <div class="col-auto">
         <span class="text-muted small">Due:</span>
-        <strong>${{ (fr.total_due or 0)|currency }}</strong>
+        <strong>${{ "%.2f"|format(fr.total_due or 0) }}</strong>
       </div>
       <div class="col-auto">
         <span class="text-muted small">Paid:</span>
-        <strong>${{ (fr.total_paid or 0)|currency }}</strong>
+        <strong>${{ "%.2f"|format(fr.total_paid or 0) }}</strong>
       </div>
       {% if fr.adjustment %}
       <div class="col-auto">
         <span class="text-muted small">Adjustment:</span>
-        <strong>${{ fr.adjustment|currency }}</strong>
+        <strong>${{ "%.2f"|format(fr.adjustment) }}</strong>
       </div>
       {% endif %}
       {% set balance = (fr.total_due or 0)|float - (fr.total_paid or 0)|float - (fr.adjustment or 0)|float %}
       {% if balance > 0.01 %}
       <div class="col-auto">
-        <span class="text-danger small fw-600">Balance: ${{ balance|currency }}</span>
+        <span class="text-danger small fw-600">Balance: ${{ "%.2f"|format(balance) }}</span>
       </div>
       {% endif %}
     </div>
@@ -136,7 +136,7 @@
           <td class="small">{{ sr.lang_class_name or '—' }}</td>
           <td class="small">{{ sr.cult_class_name or '—' }}</td>
           <td class="small">{{ sr.cult_class2_name or '—' }}</td>
-          <td class="text-end small">${{ sfee|currency }}</td>
+          <td class="text-end small">${{ "%.2f"|format(sfee) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -147,31 +147,30 @@
     {% if period and fr.pid == period.id %}
     <hr class="my-2">
     <h6 class="mb-2 small text-uppercase text-muted" style="letter-spacing:.05em">Update Payment</h6>
-    <form method="post" action="{{ url_for('admin.update_payment') }}">
+    <form method="post" action="{{ url_for('admin.update_payment') }}"
+          class="row g-2 align-items-end">
       <input type="hidden" name="fpr_id" value="{{ fr.fpr_id }}">
       <input type="hidden" name="family_id" value="{{ family.id }}">
-      <div class="row g-2 align-items-end mb-2">
-        <div class="col-auto">
-          <label class="form-label small fw-500 mb-1">Status</label>
-          <select name="reg_status" class="form-select form-select-sm">
-            <option value="Pending" {% if fr.reg_status == 'Pending' %}selected{% endif %}>Pending</option>
-            <option value="Complete Registration" {% if fr.reg_status == 'Complete Registration' %}selected{% endif %}>Complete Registration</option>
-          </select>
-        </div>
-        <div class="col-auto">
-          <label class="form-label small fw-500 mb-1">Amount Paid ($)</label>
-          <input type="number" name="total_paid" step="0.01" min="0"
-                 class="form-control form-control-sm" style="width:120px"
-                 value="{{ fr.total_paid or '' }}">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-sm btn-admin">Save</button>
-        </div>
+      <div class="col-auto">
+        <label class="form-label small fw-500 mb-1">Status</label>
+        <select name="reg_status" class="form-select form-select-sm">
+          <option value="Pending" {% if fr.reg_status == 'Pending' %}selected{% endif %}>Pending</option>
+          <option value="Complete Registration" {% if fr.reg_status == 'Complete Registration' %}selected{% endif %}>Complete Registration</option>
+        </select>
       </div>
-      <div class="mt-2">
+      <div class="col-auto">
+        <label class="form-label small fw-500 mb-1">Amount Paid ($)</label>
+        <input type="number" name="total_paid" step="0.01" min="0"
+               class="form-control form-control-sm" style="width:120px"
+               value="{{ fr.total_paid or '' }}">
+      </div>
+      <div class="col">
         <label class="form-label small fw-500 mb-1">Note</label>
-        <textarea name="description" class="form-control form-control-sm" rows="3"
-                  placeholder="Payment notes, cheque number, etc.">{{ fr.payment_note if fr.payment_note and fr.payment_note != '?' else '' }}</textarea>
+        <input type="text" name="description" class="form-control form-control-sm"
+               value="{{ fr.payment_note if fr.payment_note != '?' else '' }}">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-admin">Save</button>
       </div>
     </form>
     {% endif %}

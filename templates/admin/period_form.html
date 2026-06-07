@@ -50,9 +50,7 @@
         </div>
       </div>
       <div class="col-6 col-md-4">
-        <label class="form-label small fw-500">Late Fee
-          <span class="text-muted fw-400">(per minor, for returning families)</span>
-        </label>
+        <label class="form-label small fw-500">Late Fee</label>
         <div class="input-group input-group-sm">
           <span class="input-group-text">$</span>
           <input type="number" name="late_fee" step="0.01" min="0" class="form-control"
@@ -60,13 +58,11 @@
         </div>
       </div>
       <div class="col-6 col-md-4">
-        <label class="form-label small fw-500">Multi-Kid Discount
-          <span class="text-muted fw-400">(per kid beyond 2nd)</span>
-        </label>
+        <label class="form-label small fw-500">Discount</label>
         <div class="input-group input-group-sm">
           <span class="input-group-text">$</span>
           <input type="number" name="discount" step="0.01" min="0" class="form-control"
-                 value="{{ "%.2f"|format(period.discount or 0) if period else '30.00' }}">
+                 value="{{ "%.2f"|format(period.discount or 0) if period else '0.00' }}">
         </div>
       </div>
     </div>
@@ -95,9 +91,7 @@
     </div>
 
     <div class="mb-3">
-      <label class="form-label small fw-500">Payment Deadline
-        <span class="text-muted fw-400 small">— late fee applies to returning families who pay after this date</span>
-      </label>
+      <label class="form-label small fw-500">Registration Deadline</label>
       <input type="date" name="deadline" class="form-control" style="max-width:200px"
              value="{{ period.deadline if period and period.deadline|string != '2999-01-01' else '' }}">
     </div>

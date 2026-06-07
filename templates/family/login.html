@@ -1,23 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Family Login — Monmouth Fidelity Chinese School{% endblock %}
 {% block content %}
-<div class="text-center py-2">
-  <a href="https://www.mfcsnj.org" class="text-muted small" target="_blank">← Back to mfcsnj.org</a>
-</div>
-{% if show_resend %}
-<div class="d-flex justify-content-center mt-4">
-  <div style="width:100%;max-width:420px">
-    <div class="alert alert-warning small">
-      <strong>Email not verified.</strong> Please check your inbox and spam folder
-      for the verification email from <strong>registration@mfcsnj.org</strong>.<br><br>
-      Didn't receive it?
-      <a href="{{ url_for('family.resend_verification') }}" class="alert-link">
-        Resend verification email
-      </a>
-    </div>
-  </div>
-</div>
-{% endif %}
 <div class="d-flex justify-content-center align-items-center" style="min-height:80vh">
   <div style="width:100%;max-width:420px">
 

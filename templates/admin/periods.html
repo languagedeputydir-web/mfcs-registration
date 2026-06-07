@@ -15,7 +15,6 @@
         <th class="text-end">Reg Fee</th>
         <th class="text-end">PA Deposit</th>
         <th class="text-end">Late Fee</th>
-        <th class="text-end">Multi-Kid Discount</th>
         <th>Deadline</th>
         <th></th>
       </tr>
@@ -24,17 +23,10 @@
       {% for p in periods %}
       <tr>
         <td class="fw-500">{{ p.name }}</td>
-        <td class="text-end">${{ (p.tuition or 0)|currency }}</td>
-        <td class="text-end">${{ (p.registration_fee or 0)|currency }}</td>
-        <td class="text-end">${{ (p.pa_assignment_deposit or 0)|currency }}</td>
-        <td class="text-end">${{ (p.late_fee or 0)|currency }}</td>
-        <td class="text-end">
-          {% if p.discount and p.discount > 0 %}
-          ${{ p.discount|currency }} <span class="text-muted small">/kid</span>
-          {% else %}
-          <span class="text-muted">—</span>
-          {% endif %}
-        </td>
+        <td class="text-end">${{ "%.2f"|format(p.tuition or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.registration_fee or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.pa_assignment_deposit or 0) }}</td>
+        <td class="text-end">${{ "%.2f"|format(p.late_fee or 0) }}</td>
         <td class="small text-muted">
           {{ p.deadline if p.deadline and p.deadline|string != '2999-01-01' else '—' }}
         </td>
