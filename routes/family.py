@@ -649,15 +649,7 @@ def submit_registration(period_id):
         _gf  = period.get('grandfathered_tuition')
         _std = float(period.get('tuition') or 0)
         if _gf:
-            # Use OLD student_records (pre-submit) to back-calculate tuition rate
-            cur.execute("""SELECT COALESCE(cc.fee,0) AS cult_fee,
-                COALESCE(cc2.fee,0) AS cult_fee2
-                FROM student_record sr
-                JOIN student s ON s.id=sr.sid
-                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
-                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
-                WHERE s.fid=%s AND sr.pid=%s""", (current_user.id, period_id))
-            # Fetch OLD student_records: culture fees AND birthday for minor count.
+            # Fetch OLD student_records with birthday for accurate minor count.
             # Using OLD records (not current family list) handles the case where a
             # new member is added after the deadline — saved total reflects fewer students.
             cur.execute("""SELECT s.birthday,
