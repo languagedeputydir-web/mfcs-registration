@@ -822,6 +822,29 @@ def fee_summary(period_id):
     )
     raw_rows = cur.fetchall()
     # conn stays open until after _effective_tuition call
+
+    # If no class rows found but a saved total exists, also try without the class filter
+    # (handles edge case where student_record rows exist but classes were cleared)
+    if not raw_rows and fpr and fpr.get('total_due'):
+        cur.execute("""
+        SELECT s.id AS sid, s.last_name, s.first_name, s.birthday,
+               sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+               lc.name  AS lang_class_name,
+               cc.name  AS cult_class_name,
+               cc.fee   AS cult_fee,
+               cc2.name AS cult_class2_name,
+               cc2.fee  AS cult_fee2
+        FROM   student_record sr
+        JOIN   student s   ON s.id = sr.sid
+        LEFT   JOIN class_group_record lc  ON lc.id  = sr.lcgrid
+        LEFT   JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+        LEFT   JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE  s.fid = %s AND sr.pid = %s
+        ORDER  BY s.last_name, s.first_name
+        """,
+        (current_user.id, period_id)
+        )
+        raw_rows = cur.fetchall()
     reg_fee  = float(period.get('registration_fee') or 0) if period else 0
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
 
