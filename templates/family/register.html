@@ -68,7 +68,7 @@
       {% if not s._is_adult %}
       <div class="col-12 col-md-4">
         <label class="form-label fw-500">Language Program</label>
-        <select name="lang_{{ s.id }}" class="form-select">
+        <select name="lang_{{ s.id }}" id="lang_{{ s.id }}" class="form-select">
           <option value="0">— None —</option>
           {% for lc in lang_classes %}
           <option value="{{ lc.id }}"
