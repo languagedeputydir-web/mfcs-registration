@@ -1203,7 +1203,9 @@ def finance():
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
             LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
-            WHERE fr.pid=%s {sc} GROUP BY fr.id
+            WHERE fr.pid=%s {sc}
+            GROUP BY fr.id
+            HAVING student_count > 0
             ORDER BY f.last_name_0,f.first_name_0""",(pid,))
         regs = cur.fetchall()
 
