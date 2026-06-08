@@ -149,6 +149,20 @@
     </div>
   </div>
 
+  <!-- Live fee estimator -->
+  <div class="card p-3 mb-4" id="fee-box" style="border-left:4px solid var(--mfcs-red)">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <div class="small text-muted mb-1">Estimated Total Due</div>
+        <div class="fw-700" style="font-size:1.5rem;color:var(--mfcs-red)" id="fee-total">—</div>
+      </div>
+      <div id="fee-breakdown" class="small text-muted text-end" style="max-width:60%"></div>
+    </div>
+    {% if tuition_type == 'grandfathered' %}
+    <div class="small text-muted mt-1">✦ Grandfathered tuition rate applied</div>
+    {% endif %}
+  </div>
+
   <!-- Refund policy -->
   <div class="card p-3 mb-4" style="border-left:4px solid #ffc107">
     <div class="small">
@@ -168,6 +182,65 @@
 
 <!-- Culture class 2: disabled until culture class 1 is selected; also prevents duplicate -->
 <script>
+// ── Fee data from server ───────────────────────────────────────────────────
+const EFF_TUITION  = {{ eff_tuition | float }};
+const REG_FEE      = {{ (period.registration_fee or 0) | float }};
+const PA_FEE       = {{ (period.pa_assignment_deposit or 0) | float }};
+const CULT_FEES    = {{ cult_fee_map | tojson }};
+const ADULT_IDS    = new Set([{% for s in students if s._is_adult %}{{ s.id }},{% endfor %}]);
+
+function formatCurrency(n) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+function calcFees() {
+  let studentSubtotal = 0;
+  const lines = [];
+
+  {% for s in students %}
+  {
+    const sid   = '{{ s.id }}';
+    const isAdult = ADULT_IDS.has({{ s.id }});
+    const lang  = document.getElementById('lang_' + sid);
+    const cult1 = document.getElementById('cult1_' + sid);
+    const cult2 = document.getElementById('cult2_' + sid);
+    const cultFee1 = cult1 && cult1.value && cult1.value !== '0'
+                     ? (CULT_FEES[cult1.value] || 0) : 0;
+    const cultFee2 = cult2 && cult2.value && cult2.value !== '0'
+                     ? (CULT_FEES[cult2.value] || 0) : 0;
+
+    const hasAny = (lang && lang.value && lang.value !== '0')
+                || cultFee1 > 0 || cultFee2 > 0;
+    if (!hasAny) {
+      lines.push('{{ s.last_name }}, {{ s.first_name }}: no classes selected');
+    } else {
+      let fee = isAdult ? 0 : EFF_TUITION;
+      fee += cultFee1 + cultFee2;
+      studentSubtotal += fee;
+      let parts = [];
+      if (!isAdult) parts.push('Tuition ' + formatCurrency(EFF_TUITION));
+      if (cultFee1 > 0) parts.push('Culture ' + formatCurrency(cultFee1));
+      if (cultFee2 > 0) parts.push('Culture 2 ' + formatCurrency(cultFee2));
+      lines.push('{{ s.last_name }}, {{ s.first_name }}: ' + parts.join(' + ')
+                 + ' = ' + formatCurrency(fee));
+    }
+  }
+  {% endfor %}
+
+  const grandTotal = studentSubtotal + REG_FEE + PA_FEE;
+  document.getElementById('fee-total').textContent = formatCurrency(grandTotal);
+  document.getElementById('fee-breakdown').innerHTML =
+    lines.join('<br>') +
+    '<br><span class="text-muted">+ Reg ' + formatCurrency(REG_FEE)
+    + ' + PA ' + formatCurrency(PA_FEE) + '</span>';
+}
+
+// ── Attach change listeners ───────────────────────────────────────────────
+document.querySelectorAll('select[id^="lang_"], select[id^="cult1_"], select[id^="cult2_"]')
+  .forEach(el => el.addEventListener('change', calcFees));
+
+// ── Run once on load ──────────────────────────────────────────────────────
+calcFees();
 document.querySelectorAll('form select[id^="cult1_"]').forEach(function(sel1) {
   const sid = sel1.id.replace('cult1_', '');
   const sel2 = document.getElementById('cult2_' + sid);

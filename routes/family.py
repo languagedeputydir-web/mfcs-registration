@@ -531,11 +531,17 @@ def register_classes(period_id):
         "SELECT * FROM student WHERE fid = %s ORDER BY last_name, first_name",
         (current_user.id,)
     )
-    students = cur.fetchall()
-    if not students:
+    students_raw = cur.fetchall()
+    if not students_raw:
         conn.close()
         flash('Please add your students before registering for classes.', 'info')
         return redirect(url_for('family.students'))
+    # Add _is_adult flag to each student for template/JS use
+    students = []
+    for s in students_raw:
+        s = dict(s)
+        s['_is_adult'] = _is_adult(s)
+        students.append(s)
 
     cur.execute(
         "SELECT * FROM class_group_record "
