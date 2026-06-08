@@ -2,7 +2,9 @@
 routes/admin.py  — full admin portal
 Roles: admin | finance | language | culture
 """
-import csv, io
+import os, csv, io, smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from functools import wraps
 from flask import (Blueprint, render_template, redirect, url_for,
                    request, flash, Response)
@@ -12,6 +14,38 @@ from db import get_db_connection
 from models import Admin
 
 admin_bp = Blueprint('admin', __name__)
+
+
+def _send_email(to_addr, subject, text_body, html_body):
+    """Send an email via Brevo API (avoids SMTP port blocking on Railway)."""
+    import urllib.request, json
+    try:
+        api_key = os.environ.get('MAIL_PASSWORD', '')
+        sender  = os.environ.get('MAIL_SENDER', '')
+
+        payload = json.dumps({
+            "sender":      {"name": "Monmouth Fidelity Chinese School", "email": sender},
+            "to":          [{"email": to_addr}],
+            "subject":     subject,
+            "textContent": text_body,
+            "htmlContent": html_body
+        }).encode('utf-8')
+
+        req = urllib.request.Request(
+            'https://api.brevo.com/v3/smtp/email',
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'api-key': api_key
+            },
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(f'EMAIL DEBUG: sent to {to_addr}, status={resp.status}')
+        return True
+    except Exception as e:
+        print(f'EMAIL ERROR: {e}')
+        return False
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -60,9 +94,11 @@ def _recalc_family_record(cur, fid, pid):
     if not period:
         return 0.0, False
 
-    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee
-    cur.execute("""SELECT s.birthday, sr.lcgrid, sr.ccgrid, sr.ccgrid2,
-        COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
+    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee, _should_charge_late_fee
+    cur.execute("""SELECT s.birthday, s.is_adult, s.mfcs_affiliation,
+        sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+        COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
+        COALESCE(cc.discount,0) AS cult_disc, COALESCE(cc2.discount,0) AS cult_disc2
         FROM student s
         JOIN student_record sr ON sr.sid=s.id
         LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
@@ -73,10 +109,32 @@ def _recalc_family_record(cur, fid, pid):
     student_subtotal = 0.0
     for r in rows:
         student_subtotal += _calc_student_fee(
-            {'birthday': r['birthday']}, period,
-            float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0)
+            r, period,
+            float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0),
+            cult_discount=float(r['cult_disc'] or 0),
+            cult_discount2=float(r['cult_disc2'] or 0)
         )
-    new_total = _calc_total_family_fee(student_subtotal, period)
+    minor_count = sum(1 for r in rows if not _is_adult(r))
+
+    try:
+        cur.execute("SELECT total_paid, late_fee_waived, first_payment_date FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        fpr_row = cur.fetchone() or {}
+        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived    = bool(fpr_row.get('late_fee_waived', 0))
+        first_payment_date = fpr_row.get('first_payment_date')
+    except Exception:
+        cur.execute("SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        fpr_row = cur.fetchone() or {}
+        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
+        late_fee_waived    = False
+        first_payment_date = None
+
+    charge_late, per_minor_late = _should_charge_late_fee(
+        period, fid, pid, total_paid_so_far, late_fee_waived, None,
+        first_payment_date=first_payment_date
+    )
+    late_fee_total = minor_count * per_minor_late if charge_late else 0.0
+    new_total = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
     cur.execute(
         "SELECT id, total_due, reg_status, description FROM family_record "
@@ -141,8 +199,9 @@ def dashboard():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur)
     registered_students = 0
-    minor_students      = 0
-    adult_students      = 0
+    registered_minors   = 0
+    registered_adults   = 0
+    registered_families = 0
     total_collected = 0.0
     unpaid_balance  = 0.0
     unpaid_families = 0
@@ -150,24 +209,27 @@ def dashboard():
     if period:
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
             FROM student_record sr WHERE sr.pid=%s
-            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
-                 OR sr.ccgrid2 IS NOT NULL)""",(period['id'],))
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
         registered_students = cur.fetchone()['n']
-        # Adult = registered for at least one adult-only culture class
-        # Minor = all others (students with classes selected only)
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s AND s.is_adult=0
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_minors = cur.fetchone()['n']
+        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s AND s.is_adult=1
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_adults = cur.fetchone()['n']
+        cur.execute("""SELECT COUNT(DISTINCT s.fid) AS n
+            FROM student_record sr JOIN student s ON s.id=sr.sid
             WHERE sr.pid=%s
-            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
-                 OR sr.ccgrid2 IS NOT NULL)
-            AND (
-                EXISTS (SELECT 1 FROM class_group_record cc
-                        WHERE cc.id=sr.ccgrid AND cc.adult_only=1)
-             OR EXISTS (SELECT 1 FROM class_group_record cc2
-                        WHERE cc2.id=sr.ccgrid2 AND cc2.adult_only=1)
-            )""", (period['id'],))
-        adult_students = int(cur.fetchone()['n'])
-        minor_students = registered_students - adult_students
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
+            (period['id'],))
+        registered_families = cur.fetchone()['n']
         cur.execute("""SELECT COALESCE(SUM(total_paid),0) AS tot
             FROM family_record WHERE pid=%s""",(period['id'],))
         total_collected = float(cur.fetchone()['tot'])
@@ -187,8 +249,9 @@ def dashboard():
     return render_template('admin/dashboard.html',
         period=period,
         registered_students=registered_students,
-        minor_students=minor_students,
-        adult_students=adult_students,
+        registered_minors=registered_minors,
+        registered_adults=registered_adults,
+        registered_families=registered_families,
         total_collected=total_collected,
         unpaid_balance=unpaid_balance,
         unpaid_families=unpaid_families,
@@ -306,6 +369,60 @@ def edit_user(uid):
     conn.close()
     return render_template('admin/user_form.html', user=user)
 
+@admin_bp.route('/my-profile', methods=['GET', 'POST'])
+@login_required
+def my_profile():
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM admins WHERE id=%s", (current_user.id,))
+    user = cur.fetchone()
+    if not user:
+        conn.close()
+        flash('Profile not found.', 'error')
+        return redirect(url_for('admin.dashboard'))
+    if request.method == 'POST':
+        display_name = request.form.get('display_name', '').strip()
+        new_password = request.form.get('new_password', '').strip()
+        confirm_pw   = request.form.get('confirm_password', '').strip()
+        if new_password:
+            if new_password != confirm_pw:
+                flash('Passwords do not match.', 'error')
+                conn.close()
+                return redirect(url_for('admin.my_profile'))
+            if len(new_password) < 8:
+                flash('Password must be at least 8 characters.', 'error')
+                conn.close()
+                return redirect(url_for('admin.my_profile'))
+            cur.execute("UPDATE admins SET display_name=%s, password_hash=%s WHERE id=%s",
+                (display_name, _hash(new_password), current_user.id))
+        else:
+            cur.execute("UPDATE admins SET display_name=%s WHERE id=%s",
+                (display_name, current_user.id))
+        conn.commit(); conn.close()
+        flash('Profile updated successfully.', 'success')
+        return redirect(url_for('admin.my_profile'))
+    conn.close()
+    return render_template('admin/my_profile.html', user=user)
+
+
+@admin_bp.route('/users/<int:uid>/delete', methods=['POST'])
+@admin_bp.route('/users/<int:uid>/delete', methods=['POST'])
+@roles_required('admin')
+def delete_user(uid):
+    if uid == current_user.id:
+        flash('You cannot delete your own account.', 'error')
+        return redirect(url_for('admin.users'))
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT username FROM admins WHERE id=%s", (uid,))
+    user = cur.fetchone()
+    if not user:
+        conn.close(); flash('User not found.', 'error')
+        return redirect(url_for('admin.users'))
+    cur2 = conn.cursor()
+    cur2.execute("DELETE FROM admins WHERE id=%s", (uid,))
+    conn.commit(); conn.close()
+    flash(f'User "{user["username"]}" has been removed.', 'success')
+    return redirect(url_for('admin.users'))
+
 # ══ TEACHER RECORD (teachers / TAs / SIs) ════════════════════════════════════
 # Uses legacy table: teacher_record
 # type values: 'Teacher', 'TA', 'SI'
@@ -351,6 +468,28 @@ def facility_list():
         facilities=facilities, periods_list=plist,
         selected_period=sel_period, current_period=period, pid=pid)
 
+@admin_bp.route('/staff/teacher/<int:tid>/delete', methods=['POST'])
+@roles_required('admin')
+def delete_teacher(tid):
+    pid = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("DELETE FROM teacher_record WHERE id=%s", (tid,))
+    conn.commit(); conn.close()
+    flash('Teacher/TA deleted.', 'success')
+    return redirect(url_for('admin.staff_list', pid=pid))
+
+
+@admin_bp.route('/staff/facility/<int:fid>/delete', methods=['POST'])
+@roles_required('admin')
+def delete_facility(fid):
+    pid = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("DELETE FROM facility_record WHERE id=%s", (fid,))
+    conn.commit(); conn.close()
+    flash('Facility deleted.', 'success')
+    return redirect(url_for('admin.facility_list', pid=pid))
+
+
 @admin_bp.route('/staff/teacher/new', methods=['GET','POST'])
 @roles_required('admin','language','culture')
 def new_teacher():
@@ -371,22 +510,36 @@ def new_teacher():
             flash('Phone number must contain at least 7 digits.','error')
             conn.close()
             return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
-        # ssn is part of the legacy unique key 'trkey' (pid, ssn)
-        # Use a unique placeholder so the constraint is never violated
+        # Check for duplicate name+type in this period
+        cur.execute(
+            "SELECT id FROM teacher_record WHERE pid=%s AND type=%s AND last_name=%s AND first_name=%s",
+            (pid, stype, last, first)
+        )
+        if cur.fetchone():
+            conn.close()
+            flash(f'{stype} {first} {last} already exists for this school year.', 'error')
+            return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
+
         import uuid as _uuid
-        ssn_val = f.get('ssn','').strip() or _uuid.uuid4().hex[:12]
-        cur.execute("""INSERT INTO teacher_record
-            (pid,type,last_name,first_name,chinese_name,gender,phone,email,
-             street_address,city,state,zip,ssn,description,status,last_update)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',NOW())""",
-            (pid,stype,last,first,
-             f.get('chinese_name','?'),f.get('gender','?'),phone,
-             f.get('email','?'),f.get('street_address','?'),
-             f.get('city','?'),f.get('state','?'),f.get('zip','?'),
-             ssn_val,f.get('description','?')))
-        conn.commit(); conn.close()
-        flash(f'{stype} {first} {last} added.','success')
-        return redirect(url_for('admin.staff_list', pid=pid))
+        ssn_val = f.get('ssn','').strip() or f"auto-{_uuid.uuid4().hex}"
+        email_val = f.get('email','').strip() or '?'
+        try:
+            cur.execute("""INSERT INTO teacher_record
+                (pid,type,last_name,first_name,chinese_name,gender,phone,email,
+                 street_address,city,state,zip,ssn,description,status,last_update)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',NOW())""",
+                (pid,stype,last,first,
+                 f.get('chinese_name','?'),f.get('gender','?'),phone,
+                 email_val,f.get('street_address','?'),
+                 f.get('city','?'),f.get('state','?'),f.get('zip','?'),
+                 ssn_val,f.get('description','?')))
+            conn.commit(); conn.close()
+            flash(f'{stype} {first} {last} added.','success')
+            return redirect(url_for('admin.staff_list', pid=pid))
+        except Exception as e:
+            conn.close()
+            flash(f'Error adding staff: {e}', 'error')
+            return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
     conn.close()
     return render_template('admin/teacher_form.html', teacher=None, periods_list=plist)
 
@@ -431,14 +584,22 @@ def new_facility():
         if not pid or not name:
             flash('Period and name are required.','error'); conn.close()
             return render_template('admin/facility_form.html', facility=None, periods_list=plist)
-        cur.execute("""INSERT INTO facility_record
-            (pid,name,chinese_name,max_capacity,description,status,last_update)
-            VALUES(%s,%s,%s,%s,%s,'active',NOW())""",
-            (pid,name,f.get('chinese_name','?'),
-             f.get('max_capacity','-1'),f.get('description','?')))
-        conn.commit(); conn.close()
-        flash(f'Facility "{name}" added.','success')
-        return redirect(url_for('admin.facility_list', pid=pid))
+        try:
+            cur.execute("""INSERT INTO facility_record
+                (pid,name,chinese_name,max_capacity,description,status,last_update)
+                VALUES(%s,%s,%s,%s,%s,'active',NOW())""",
+                (pid,name,f.get('chinese_name','?'),
+                 f.get('max_capacity','-1'),f.get('description','?')))
+            conn.commit(); conn.close()
+            flash(f'Facility "{name}" added.','success')
+            return redirect(url_for('admin.facility_list', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A facility named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding facility: {e}', 'error')
+            return render_template('admin/facility_form.html', facility=None, periods_list=plist)
     conn.close()
     return render_template('admin/facility_form.html', facility=None, periods_list=plist)
 
@@ -778,6 +939,13 @@ def delete_language_class(cid):
     cls = cur.fetchone()
     if not cls: conn.close(); flash('Not found.','error'); return redirect(url_for('admin.language_classes'))
     pid = cls['pid']
+    # Block deletion if any students are registered to this class
+    cur.execute("SELECT COUNT(*) AS n FROM student_record WHERE lcgrid=%s", (cid,))
+    if cur.fetchone()['n'] > 0:
+        conn.close()
+        flash(f'Cannot delete "{cls["name"]}" — students are still registered to this class. '
+              f'Please reassign them first.', 'error')
+        return redirect(url_for('admin.language_classes', pid=pid))
     cur.execute("DELETE FROM class_assignment WHERE crid IN (SELECT id FROM class_record WHERE cgrid=%s)",(cid,))
     cur.execute("DELETE FROM class_record WHERE cgrid=%s",(cid,))
     cur.execute("DELETE FROM class_group_record WHERE id=%s",(cid,))
@@ -794,6 +962,13 @@ def delete_culture_class(cid):
     cls = cur.fetchone()
     if not cls: conn.close(); flash('Not found.','error'); return redirect(url_for('admin.culture_classes'))
     pid = cls['pid']
+    # Block deletion if any students are registered to this class
+    cur.execute("SELECT COUNT(*) AS n FROM student_record WHERE ccgrid=%s OR ccgrid2=%s", (cid, cid))
+    if cur.fetchone()['n'] > 0:
+        conn.close()
+        flash(f'Cannot delete "{cls["name"]}" — students are still registered to this class. '
+              f'Please reassign them first.', 'error')
+        return redirect(url_for('admin.culture_classes', pid=pid))
     cur.execute("DELETE FROM class_assignment WHERE crid IN (SELECT id FROM class_record WHERE cgrid=%s)",(cid,))
     cur.execute("DELETE FROM class_record WHERE cgrid=%s",(cid,))
     cur.execute("DELETE FROM class_group_record WHERE id=%s",(cid,))
@@ -828,6 +1003,14 @@ def language_classes():
             (SELECT COUNT(DISTINCT ca4.srid)
              FROM class_record cr5 JOIN class_assignment ca4 ON ca4.crid=cr5.id
              WHERE cr5.cgrid=cgr.id AND ca4.srid IS NOT NULL) AS student_count,
+            (SELECT COUNT(DISTINCT sr.id)
+             FROM student_record sr
+             WHERE sr.lcgrid=cgr.id
+             AND sr.id NOT IN (
+                 SELECT ca6.srid FROM class_assignment ca6
+                 JOIN class_record cr7 ON cr7.id=ca6.crid
+                 WHERE cr7.cgrid=cgr.id AND ca6.srid IS NOT NULL
+             )) AS pending_count,
             (SELECT GROUP_CONCAT(DISTINCT fr2.name ORDER BY fr2.name SEPARATOR '; ')
              FROM class_record cr6 JOIN class_assignment ca5 ON ca5.crid=cr6.id
              JOIN facility_record fr2 ON fr2.id=ca5.facrid
@@ -849,16 +1032,24 @@ def new_language_class():
         if not pid or not name:
             flash('Period and name required.','error'); conn.close()
             return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
-        cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,allow_as_second)
-            VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active',0)""",
-            (pid,name,f.get('chinese_name','?'),f.get('min_size','1'),f.get('max_size','50'),f.get('description','?')))
-        cgrid = cur.lastrowid
-        cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
-            VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid,))
-        conn.commit(); conn.close()
-        flash(f'Language class "{name}" added.','success')
-        return redirect(url_for('admin.language_classes', pid=pid))
+        try:
+            cur.execute("""INSERT INTO class_group_record
+                (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status)
+                VALUES(%s,%s,%s,'language',0,0,0,0,%s,%s,%s,'active')""",
+                (pid,name,f.get('chinese_name','?'),f.get('min_size','1'),f.get('max_size','50'),f.get('description','?')))
+            cgrid = cur.lastrowid
+            cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
+                VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid,))
+            conn.commit(); conn.close()
+            flash(f'Language class "{name}" added.','success')
+            return redirect(url_for('admin.language_classes', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A language class named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding class: {e}', 'error')
+            return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
     conn.close()
     return render_template('admin/class_form.html',cls=None,class_type='language',periods_list=plist)
 
@@ -907,6 +1098,14 @@ def culture_classes():
             (SELECT COUNT(DISTINCT ca4.srid)
              FROM class_record cr5 JOIN class_assignment ca4 ON ca4.crid=cr5.id
              WHERE cr5.cgrid=cgr.id AND ca4.srid IS NOT NULL) AS student_count,
+            (SELECT COUNT(DISTINCT sr.id)
+             FROM student_record sr
+             WHERE (sr.ccgrid=cgr.id OR sr.ccgrid2=cgr.id)
+             AND sr.id NOT IN (
+                 SELECT ca6.srid FROM class_assignment ca6
+                 JOIN class_record cr7 ON cr7.id=ca6.crid
+                 WHERE cr7.cgrid=cgr.id AND ca6.srid IS NOT NULL
+             )) AS pending_count,
             (SELECT GROUP_CONCAT(DISTINCT fr2.name ORDER BY fr2.name SEPARATOR '; ')
              FROM class_record cr6 JOIN class_assignment ca5 ON ca5.crid=cr6.id
              JOIN facility_record fr2 ON fr2.id=ca5.facrid
@@ -928,20 +1127,30 @@ def new_culture_class():
         if not pid or not name:
             flash('Period and name required.','error'); conn.close()
             return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
-        allow2 = 1 if f.get('allow_as_second') else 0
-        adult_only = 1 if f.get('adult_only') else 0
-        cur.execute("""INSERT INTO class_group_record
-            (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,allow_as_second,adult_only)
-            VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s,%s)""",
-            (pid,name,f.get('chinese_name','?'),f.get('fee','0'),
-             f.get('late_fee','0'),f.get('discount','0'),
-             f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),allow2,adult_only))
-        cgrid2 = cur.lastrowid
-        cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
-            VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid2,))
-        conn.commit(); conn.close()
-        flash(f'Culture class "{name}" added.','success')
-        return redirect(url_for('admin.culture_classes', pid=pid))
+        allow2     = 1 if f.get('allow_as_second') else 0
+        audience   = f.get('audience', 'children')
+        adult_only = 1 if audience == 'adult' else 0
+        try:
+            cur.execute("""INSERT INTO class_group_record
+                (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,adult_only,allow_as_second,audience)
+                VALUES(%s,%s,%s,'culture',%s,0,%s,%s,%s,%s,%s,'active',%s,%s,%s)""",
+                (pid,name,f.get('chinese_name','?'),f.get('fee','0'),
+                 f.get('late_fee','0'),f.get('discount','0'),
+                 f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),
+                 adult_only,allow2,audience))
+            cgrid2 = cur.lastrowid
+            cur.execute("""INSERT INTO class_record (cgrid,name,chinese_name,min_size,max_size,description,status,last_update)
+                VALUES(%s,'Section 1','?',1,50,'?','active',NOW())""",(cgrid2,))
+            conn.commit(); conn.close()
+            flash(f'Culture class "{name}" added.','success')
+            return redirect(url_for('admin.culture_classes', pid=pid))
+        except Exception as e:
+            conn.close()
+            if '1062' in str(e) or 'Duplicate' in str(e):
+                flash(f'A culture class named "{name}" already exists for this school year.', 'error')
+            else:
+                flash(f'Error adding class: {e}', 'error')
+            return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
     conn.close()
     return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
 
@@ -954,14 +1163,15 @@ def edit_culture_class(cid):
     plist = _periods_list(cur)
     if request.method == 'POST':
         f = request.form; allow2 = 1 if f.get('allow_as_second') else 0
-        adult_only2 = 1 if f.get('adult_only') else 0
+        audience    = f.get('audience', 'children')
+        adult_only2 = 1 if audience == 'adult' else 0
         cur.execute("""UPDATE class_group_record SET pid=%s,name=%s,chinese_name=%s,
             fee=%s,misc_fee=0,late_fee=%s,discount=%s,min_size=%s,max_size=%s,
-            description=%s,allow_as_second=%s,adult_only=%s WHERE id=%s""",
+            description=%s,adult_only=%s,allow_as_second=%s,audience=%s WHERE id=%s""",
             (f.get('pid'),f.get('name',''),f.get('chinese_name','?'),
              f.get('fee','0'),f.get('late_fee','0'),f.get('discount','0'),
              f.get('min_size','1'),f.get('max_size','50'),f.get('description','?'),
-             allow2,adult_only2,cid))
+             adult_only2,allow2,audience,cid))
         conn.commit(); conn.close(); flash('Culture class updated.','success')
         return redirect(url_for('admin.culture_classes', pid=cls['pid']))
     conn.close()
@@ -972,6 +1182,7 @@ def edit_culture_class(cid):
 @admin_bp.route('/finance')
 @roles_required('admin','finance')
 def finance():
+    from routes.family import _is_adult, _is_late
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur); plist = _periods_list(cur)
     pid = request.args.get('pid', period['id'] if period else None)
@@ -986,74 +1197,157 @@ def finance():
             f.primary_email,f.primary_phone,
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
-            COUNT(DISTINCT sr.sid) AS student_count
+            fr.late_fee_waived, fr.tuition_override, fr.first_payment_date,
+            fr.reg_fee_waived,
+            COUNT(DISTINCT CASE WHEN (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL) THEN sr.sid END) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
-            LEFT JOIN student_record sr ON sr.pid=fr.pid
-                AND sr.sid IN (SELECT id FROM student WHERE fid=f.id)
-                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+            LEFT JOIN student s ON s.fid=f.id
+            LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
             WHERE fr.pid=%s {sc} GROUP BY fr.id
             ORDER BY f.last_name_0,f.first_name_0""",(pid,))
         regs = cur.fetchall()
+
+        # Fetch student details for each family
+        reg_fee    = float(sel.get('registration_fee') or 0) if sel else 0
+        pa_fee     = float(sel.get('pa_assignment_deposit') or 0) if sel else 0
+        disc_per   = float(sel.get('discount') or 0) if sel else 0
+        tuition    = float(sel.get('tuition') or 0) if sel else 0
+        from routes.family import _is_late
+        late_fee   = float(sel.get('late_fee') or 0) if (sel and _is_late(sel)) else 0
+
+        cur.execute("""
+            SELECT s.id, s.fid, s.last_name, s.first_name, s.is_adult, s.mfcs_affiliation,
+                   s.birthday,
+                   lc.name AS lang_class,
+                   cc.name  AS cult_class,  cc.fee  AS cult_fee,  cc.discount  AS cult_disc,
+                   cc2.name AS cult_class2, cc2.fee AS cult_fee2, cc2.discount AS cult_disc2
+            FROM student_record sr
+            JOIN student s ON s.id = sr.sid
+            LEFT JOIN class_group_record lc  ON lc.id  = sr.lcgrid
+            LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+            LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+            WHERE sr.pid = %s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+            ORDER BY s.fid, s.last_name, s.first_name
+        """, (pid,))
+        all_students = cur.fetchall()
+
+        from collections import defaultdict
+        students_by_fid = defaultdict(list)
+        for s in all_students:
+            adult = _is_adult(s)
+            mfcs  = s.get('mfcs_affiliation') == 'Y'
+            cf1_raw = float(s.get('cult_fee')  or 0)
+            cf2_raw = float(s.get('cult_fee2') or 0)
+            d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+            d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+            cf1 = max(0.0, cf1_raw - d1)
+            cf2 = max(0.0, cf2_raw - d2)
+            # Store raw data — tuition calculated per-family below
+            s['cf1'] = cf1
+            s['cf2'] = cf2
+            s['is_adult'] = adult
+            students_by_fid[s['fid']].append(s)
+
+        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition, _is_returning_family, _is_late
         for r in regs:
-            r['balance'] = float(r['total_due'] or 0)-float(r['total_paid'] or 0)-float(r['adjustment'] or 0)
-        # Fetch per-student breakdown for detail rows
-        if regs and sel:
-            from routes.family import _calc_student_fee, _is_adult
-            cur.execute("""SELECT s.fid, s.first_name, s.last_name, s.birthday,
-                lc.name AS lang_name,
-                cc.name  AS cult1_name, COALESCE(cc.fee,0)  AS cult1_fee,
-                cc2.name AS cult2_name, COALESCE(cc2.fee,0) AS cult2_fee
-                FROM student_record sr
-                JOIN student s ON s.id=sr.sid
-                LEFT JOIN class_group_record lc  ON lc.id=sr.lcgrid
-                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
-                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
-                WHERE sr.pid=%s
-                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
-                ORDER BY s.last_name, s.first_name""", (pid,))
-            student_rows = cur.fetchall()
-            # Build breakdown map: fid → list of student dicts with fees
-            breakdown = {}
-            for sr in student_rows:
-                fid = sr['fid']
-                # Back-calculate tuition for this family
-                fpr_match = next((r for r in regs if r['family_id']==fid), None)
-                period_tuition = float(sel.get('tuition') or 0)
-                if fpr_match and fpr_match.get('total_due') and sel.get('grandfathered_tuition'):
-                    saved = float(fpr_match['total_due'])
-                    gf  = float(sel['grandfathered_tuition'])
-                    std = float(sel['tuition'])
-                    fam_students = [x for x in student_rows if x['fid']==fid]
-                    old_cult = sum(float(x['cult1_fee']) + float(x['cult2_fee']) for x in fam_students)
-                    minors   = sum(1 for x in fam_students if not _is_adult(x))
-                    reg_fee  = float(sel.get('registration_fee') or 0)
-                    pa_fee   = float(sel.get('pa_assignment_deposit') or 0)
-                    if minors > 0:
-                        implied = (saved - old_cult - reg_fee - pa_fee) / minors
-                        if abs(implied - gf) <= 1.0:   period_tuition = gf
-                        elif abs(implied - std) <= 1.0: period_tuition = std
-                period_dict = {**sel, 'tuition': period_tuition}
-                fee = _calc_student_fee({'birthday': sr['birthday']}, period_dict,
-                                        float(sr['cult1_fee']), float(sr['cult2_fee']))
-                if fid not in breakdown: breakdown[fid] = []
-                breakdown[fid].append({**sr, 'display_fee': fee,
-                    'is_adult': _is_adult({'birthday': sr['birthday']})})
-        else:
-            breakdown = {}
+            r['balance'] = float(r['total_due'] or 0) - float(r['total_paid'] or 0) - float(r['adjustment'] or 0)
+            details = students_by_fid.get(r['family_id'], [])
+
+            # Get effective tuition for this family (grandfathered or standard)
+            _conn_tuit = get_db_connection()
+            eff_tuit, tuit_type = _effective_tuition(sel, r['family_id'], _conn_tuit)
+            _conn_tuit.close()
+            r['tuit_type'] = tuit_type
+
+            # Apply per-family tuition and MFCS discount to each student
+            for s in details:
+                mfcs = s.get('mfcs_affiliation') == 'Y'
+                cf1_raw = float(s.get('cult_fee')  or 0)
+                cf2_raw = float(s.get('cult_fee2') or 0)
+                d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+                d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+                s['cf1'] = max(0.0, cf1_raw - d1)
+                s['cf2'] = max(0.0, cf2_raw - d2)
+                tuit = 0.0 if s['is_adult'] else eff_tuit
+                s['tuition'] = tuit
+                s['student_fee'] = tuit + s['cf1'] + s['cf2']
+
+            minor_count = sum(1 for s in details if not s['is_adult'])
+            extra_kids  = max(0, minor_count - 2)
+            multi_disc  = extra_kids * disc_per
+            # Reg fee waived — only for new families
+            _conn_new = get_db_connection()
+            is_new = not _is_returning_family(r['family_id'], int(pid), _conn_new)
+            _conn_new.close()
+            r['is_new_family']   = is_new
+            r['reg_fee_waived']  = bool(r.get('reg_fee_waived', 0))
+            # Apply waiver to reg fee
+            fam_reg_fee = (0.0 if r['reg_fee_waived'] else reg_fee) if minor_count > 0 else 0.0
+            fam_pa_fee  = pa_fee if minor_count > 0 else 0.0
+            fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
+            total_paid_fam = float(r.get('total_paid') or 0)
+            # Check late fee per family with a fresh connection
+            from routes.family import _should_charge_late_fee as _sclf
+            _conn_tmp = get_db_connection()
+            charge_late, per_minor = _sclf(
+                sel, r['family_id'], int(pid),
+                total_paid_fam, fam_late_fee_waived, _conn_tmp,
+                first_payment_date=r.get('first_payment_date')
+            )
+            _conn_tmp.close()
+            fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
+
+            r['student_details']  = details
+            r['student_subtotal'] = sum(s['student_fee'] for s in details)
+            r['reg_fee']          = fam_reg_fee
+            r['pa_fee']           = fam_pa_fee
+            r['late_fee']         = fam_late_fee
+            r['multi_disc']       = multi_disc
+            r['extra_kids']       = extra_kids
+            r['discount_per']     = disc_per
+            # late_fee_eligible: returning + past deadline + has minors (ignores payment & waiver)
+            if minor_count > 0 and _is_late(sel):
+                _conn_tmp2 = get_db_connection()
+                is_ret = _is_returning_family(r['family_id'], int(pid), _conn_tmp2)
+                _conn_tmp2.close()
+                r['late_fee_eligible'] = is_ret
+            else:
+                r['late_fee_eligible'] = False
+            # Grandfathered tuition eligibility for toggle button
+            _conn_gran = get_db_connection()
+            r['gran_eligible'] = bool(
+                sel and sel.get('grandfathered_tuition') and minor_count > 0 and
+                _is_returning_family(r['family_id'], int(pid), _conn_gran)
+            )
+            _conn_gran.close()
+            r['minor_count']    = minor_count
+            r['per_minor_late'] = per_minor if charge_late else float(sel.get('late_fee') or 0)
+            r['calc_total']     = r['student_subtotal'] + fam_reg_fee + fam_pa_fee + fam_late_fee - multi_disc
+
     conn.close()
     return render_template('admin/finance.html',
         periods_list=plist, selected_period=sel, registrations=regs,
-        breakdown=breakdown,
         status_filter=status, current_period=period, pid=pid)
 
 @admin_bp.route('/finance/update', methods=['POST'])
 @roles_required('admin','finance')
 def finance_update():
-    fpr_id = request.form.get('fpr_id')
-    total_paid = request.form.get('total_paid','').strip()
-    note = request.form.get('description','').strip()
-    mark_done = request.form.get('mark_complete')
-    pid = request.form.get('pid')
+    fpr_id             = request.form.get('fpr_id')
+    total_paid         = request.form.get('total_paid','').strip()
+    note               = request.form.get('description','').strip()
+    mark_done          = request.form.get('mark_complete')
+    pid                = request.form.get('pid')
+    first_payment_date = request.form.get('first_payment_date','').strip() or None
+
+    # Validate date format
+    if first_payment_date:
+        try:
+            from datetime import datetime as dt
+            first_payment_date = dt.strptime(first_payment_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except Exception:
+            first_payment_date = None
+
     if not fpr_id: flash('No record.','error'); return redirect(url_for('admin.finance'))
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM family_record WHERE id=%s",(fpr_id,)); fpr = cur.fetchone()
@@ -1065,6 +1359,8 @@ def finance_update():
     new_status = request.form.get('reg_status','').strip()
     if new_status in ('Complete Registration','Pending'):
         updates.append("reg_status=%s"); params.append(new_status)
+    if first_payment_date:
+        updates.append("first_payment_date=%s"); params.append(first_payment_date)
     params.append(int(fpr_id))
     cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s", params)
     conn.commit(); conn.close(); flash('Payment updated.','success')
@@ -1092,28 +1388,24 @@ def families():
         filter_pid = int(pid)
         if q:
             like = f"%{q}%"
-            cur.execute("""SELECT f.*,
-                COUNT(DISTINCT sr.sid) AS student_count,
+            cur.execute("""SELECT f.*,COUNT(DISTINCT sr.sid) AS student_count,
                 fr.reg_status, fr.total_due, fr.total_paid, fr.adjustment
                 FROM family_record fr
                 JOIN family f ON f.id=fr.fid
-                LEFT JOIN student_record sr ON sr.pid=fr.pid
-                    AND sr.sid IN (SELECT id FROM student WHERE fid=f.id)
-                    AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+                LEFT JOIN student s ON s.fid=f.id
+                LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
                 WHERE fr.pid=%s
                 AND (f.last_name_0 LIKE %s OR f.first_name_0 LIKE %s
                      OR f.primary_email LIKE %s)
                 GROUP BY f.id, fr.id ORDER BY f.last_name_0,f.first_name_0""",
                 (filter_pid,like,like,like))
         else:
-            cur.execute("""SELECT f.*,
-                COUNT(DISTINCT sr.sid) AS student_count,
+            cur.execute("""SELECT f.*,COUNT(DISTINCT sr.sid) AS student_count,
                 fr.reg_status, fr.total_due, fr.total_paid, fr.adjustment
                 FROM family_record fr
                 JOIN family f ON f.id=fr.fid
-                LEFT JOIN student_record sr ON sr.pid=fr.pid
-                    AND sr.sid IN (SELECT id FROM student WHERE fid=f.id)
-                    AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+                LEFT JOIN student s ON s.fid=f.id
+                LEFT JOIN student_record sr ON sr.sid=s.id AND sr.pid=fr.pid
                 WHERE fr.pid=%s
                 GROUP BY f.id, fr.id ORDER BY f.last_name_0,f.first_name_0""",
                 (filter_pid,))
@@ -1176,49 +1468,15 @@ def family_detail(fid):
     # Only keep student_records where at least one class is selected
     student_records = [sr for sr in student_records
                        if sr.get('lcgrid') or sr.get('ccgrid') or sr.get('ccgrid2')]
-    # Calculate per-student fee for display.
-    # Use a fresh connection — original conn was already closed above.
+    # Calculate per-student fee for display
     from routes.family import _age, _is_adult, _calc_student_fee
-
-    conn2 = get_db_connection(); cur2 = conn2.cursor(dictionary=True)
-    tuition_by_pid = {}
-    for fr in family_records:
-        pid_key = fr['pid']
-        stored_total = float(fr.get('total_due') or 0)
-        cur2.execute("SELECT * FROM period WHERE id=%s", (pid_key,))
-        p = cur2.fetchone()
-        if not p:
-            tuition_by_pid[pid_key] = 0.0
-            continue
-        pid_students = [sr for sr in student_records
-                        if sr.get('pid') == pid_key]
-        minor_count = sum(1 for sr in pid_students
-                         if not _is_adult({'birthday': sr.get('birthday')}))
-        cult_total = sum(
-            float(sr.get('cult_fee', 0) or 0) + float(sr.get('cult_fee2', 0) or 0)
-            for sr in pid_students
-        )
-        reg_fee = float(p.get('registration_fee') or 0)
-        pa_fee  = float(p.get('pa_assignment_deposit') or 0)
-        if minor_count > 0 and stored_total > 0:
-            implied_tuition = (stored_total - cult_total - reg_fee - pa_fee) / minor_count
-            std = float(p.get('tuition') or 0)
-            gf  = float(p.get('grandfathered_tuition') or std)
-            if abs(implied_tuition - gf) < 1.0:
-                tuition_by_pid[pid_key] = gf
-            elif abs(implied_tuition - std) < 1.0:
-                tuition_by_pid[pid_key] = std
-            else:
-                tuition_by_pid[pid_key] = implied_tuition
-        else:
-            tuition_by_pid[pid_key] = float(p.get('tuition') or 0)
-    conn2.close()
-
     for sr in student_records:
-        student_dict = {'birthday': sr.get('birthday')}
-        eff_t = tuition_by_pid.get(sr.get('pid'), float(sr.get('period_tuition', 0) or 0))
-        period_dict  = {'tuition': eff_t,
-                        'registration_fee': 0, 'pa_assignment_deposit': 0}
+        student_dict = {'birthday': sr.get('birthday'),
+                        'is_adult': sr.get('is_adult', 0),
+                        'mfcs_affiliation': sr.get('mfcs_affiliation')}
+        period_dict  = {'tuition': sr.get('period_tuition', 0),
+                        'registration_fee': 0, 'pa_assignment_deposit': 0,
+                        'discount': sr.get('period_discount', 0)}
         cult_fee  = float(sr.get('cult_fee',  0) or 0)
         cult_fee2 = float(sr.get('cult_fee2', 0) or 0)
         sr['display_fee'] = _calc_student_fee(student_dict, period_dict, cult_fee, cult_fee2)
@@ -1250,24 +1508,280 @@ def new_family():
         return redirect(url_for('admin.family_detail', fid=new_id))
     return render_template('admin/new_family.html')
 
+@admin_bp.route('/payment/waive-reg-fee', methods=['POST'])
+@roles_required('admin','finance')
+def waive_reg_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET reg_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Registration fee waived.', 'success')
+    return redirect(url_for('admin.finance', pid=pid))
+
+
+@admin_bp.route('/payment/unwaive-reg-fee', methods=['POST'])
+@roles_required('admin','finance')
+def unwaive_reg_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid','')
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE family_record SET reg_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
+    conn.commit(); conn.close()
+    flash('Registration fee reinstated.', 'success')
+    return redirect(url_for('admin.finance', pid=pid))
+
+@admin_bp.route('/payment/waive-late-fee', methods=['POST'])
+@roles_required('admin','finance')
+def waive_late_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid', '')
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        cur.execute("UPDATE family_record SET late_fee_waived=1, last_update=NOW() WHERE id=%s", (fpr_id,))
+        conn.commit()
+        flash('Late fee waived for this family.', 'success')
+    except Exception:
+        flash('Cannot waive late fee — database column not yet created. Please run the migration SQL.', 'error')
+    conn.close()
+    return redirect(url_for('admin.finance', pid=pid or None))
+
+
+@admin_bp.route('/payment/unwaive-late-fee', methods=['POST'])
+@roles_required('admin','finance')
+def unwaive_late_fee():
+    fpr_id = request.form.get('fpr_id')
+    pid    = request.form.get('pid', '')
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        cur.execute("UPDATE family_record SET late_fee_waived=0, last_update=NOW() WHERE id=%s", (fpr_id,))
+        conn.commit()
+        flash('Late fee reinstated for this family.', 'success')
+    except Exception:
+        flash('Cannot update late fee waiver — database column not yet created.', 'error')
+    conn.close()
+    return redirect(url_for('admin.finance', pid=pid or None))
+
+
+@admin_bp.route('/payment/set-tuition', methods=['POST'])
+@roles_required('admin','finance')
+def set_tuition_override():
+    fpr_id   = request.form.get('fpr_id')
+    pid      = request.form.get('pid', '')
+    override = request.form.get('override')  # 'grandfathered' or 'standard' or 'clear'
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get family info for email
+    cur.execute("""
+        SELECT f.primary_email, f.first_name_0, f.last_name_0,
+               fr.total_due, fr.fid, p.name AS period_name,
+               p.tuition, p.grandfathered_tuition,
+               p.registration_fee, p.pa_assignment_deposit,
+               p.discount, p.late_fee, p.deadline,
+               p.grandfathered_tuition, p.grandfathered_deadline
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        JOIN period p ON p.id = fr.pid
+        WHERE fr.id = %s
+    """, (fpr_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash('Family record not found.', 'error')
+        return redirect(url_for('admin.finance', pid=pid or None))
+
+    # Set override
+    new_override = None if override == 'clear' else override
+    cur2 = conn.cursor()
+    cur2.execute(
+        "UPDATE family_record SET tuition_override=%s, last_update=NOW() WHERE id=%s",
+        (new_override, fpr_id)
+    )
+    conn.commit()
+
+    # Recalculate total_due with new tuition
+    from routes.family import (_is_adult, _calc_student_fee, _calc_total_family_fee,
+                                _should_charge_late_fee, _effective_tuition, _is_returning_family)
+    period_dict = dict(row)
+    period_dict['id'] = int(pid) if pid else 0
+
+    conn2 = get_db_connection()
+    eff_tuit, tuit_type = _effective_tuition(period_dict, row['fid'], conn2)
+
+    # Get students and fees
+    cur3 = conn2.cursor(dictionary=True)
+    cur3.execute("""
+        SELECT s.is_adult, s.mfcs_affiliation, s.birthday,
+               COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
+               COALESCE(cc.discount,0) AS cult_disc, COALESCE(cc2.discount,0) AS cult_disc2
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        LEFT JOIN class_group_record cc  ON cc.id = sr.ccgrid
+        LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE sr.pid = %s AND s.fid = %s
+    """, (pid, row['fid']))
+    students = cur3.fetchall()
+
+    student_sub = 0.0; minor_count = 0
+    for s in students:
+        mfcs = s.get('mfcs_affiliation') == 'Y'
+        cf1 = max(0, float(s['cult_fee']  or 0) - (float(s['cult_disc']  or 0) if mfcs else 0))
+        cf2 = max(0, float(s['cult_fee2'] or 0) - (float(s['cult_disc2'] or 0) if mfcs else 0))
+        tuit = 0.0 if _is_adult(s) else eff_tuit
+        student_sub += tuit + cf1 + cf2
+        if not _is_adult(s): minor_count += 1
+
+    # Get late fee status
+    cur3.execute("SELECT total_paid, late_fee_waived FROM family_record WHERE id=%s", (fpr_id,))
+    fpr_row = cur3.fetchone() or {}
+    charge_late, per_minor = _should_charge_late_fee(
+        period_dict, row['fid'], int(pid) if pid else 0,
+        float(fpr_row.get('total_paid') or 0),
+        bool(fpr_row.get('late_fee_waived', 0)),
+        conn2
+    )
+    late_fee = minor_count * per_minor if charge_late else 0.0
+    conn2.close()
+
+    new_total = _calc_total_family_fee(student_sub, period_dict, minor_count, late_fee)
+
+    # Update total_due
+    cur2.execute(
+        "UPDATE family_record SET total_due=%s, last_update=NOW() WHERE id=%s",
+        (new_total, fpr_id)
+    )
+    conn.commit()
+    conn.close()
+
+    # Send notification email to family
+    from routes.family import _send_email
+    if override == 'standard':
+        subject = f'MFCS — Tuition Update for {row["period_name"]}'
+        note = 'standard (full) tuition'
+        color = '#e74c3c'
+    else:
+        subject = f'MFCS — Tuition Update for {row["period_name"]}'
+        note = 'returning family (grandfathered) tuition'
+        color = '#27ae60'
+
+    _send_email(
+        to_addr=row['primary_email'],
+        subject=subject,
+        text_body=(
+            f"Dear {row['first_name_0']} {row['last_name_0']},\n\n"
+            f"Your tuition rate for {row['period_name']} has been updated "
+            f"to {note}.\n\n"
+            f"Your new total due is: ${new_total:.2f}\n\n"
+            f"Please log in to your account to view the updated fee summary.\n\n"
+            f"Questions? Contact us at languagedeputydir@mfcsnj.org\n\n"
+            f"Monmouth Fidelity Chinese School"
+        ),
+        html_body=(
+            f"<p>Dear {row['first_name_0']} {row['last_name_0']},</p>"
+            f"<p>Your tuition rate for <strong>{row['period_name']}</strong> has been updated.</p>"
+            f"<div style='background:#f9f9f9;border-left:4px solid {color};"
+            f"padding:12px;margin:16px 0'>"
+            f"<strong>Tuition rate:</strong> {note}<br>"
+            f"<strong>New Total Due: ${new_total:.2f}</strong>"
+            f"</div>"
+            f"<p>Please <a href='https://register.mfcsnj.org'>log in to your account</a> "
+            f"to view the updated fee summary.</p>"
+            f"<p>Questions? Contact us at "
+            f"<a href='mailto:languagedeputydir@mfcsnj.org'>languagedeputydir@mfcsnj.org</a></p>"
+            f"<p>Monmouth Fidelity Chinese School</p>"
+        )
+    )
+
+    label = 'standard tuition' if override == 'standard' else 'grandfathered tuition'
+    flash(f'Tuition switched to {label}. Family notified by email. New total: ${new_total:.2f}', 'success')
+    return redirect(url_for('admin.finance', pid=pid or None))
+
+
 @admin_bp.route('/payment/update', methods=['POST'])
 @roles_required('admin','finance')
 def update_payment():
-    fpr_id=request.form.get('fpr_id'); family_id=request.form.get('family_id')
-    reg_status=request.form.get('reg_status','').strip()
-    total_paid=request.form.get('total_paid','').strip()
-    note=request.form.get('description','').strip()
-    conn=get_db_connection(); cur=conn.cursor()
-    updates=["last_update=NOW()"]; params=[]
+    fpr_id             = request.form.get('fpr_id')
+    family_id          = request.form.get('family_id')
+    reg_status         = request.form.get('reg_status','').strip()
+    total_paid         = request.form.get('total_paid','').strip()
+    note               = request.form.get('description','').strip()
+    first_payment_date = request.form.get('first_payment_date','').strip() or None
+    # Validate date format to avoid timezone issues
+    if first_payment_date:
+        try:
+            from datetime import datetime as dt
+            first_payment_date = dt.strptime(first_payment_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except Exception:
+            first_payment_date = None
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get previous status before updating
+    cur.execute("SELECT reg_status, total_due, total_paid, first_payment_date FROM family_record WHERE id=%s", (int(fpr_id),))
+    fpr_before = cur.fetchone()
+    old_status = (fpr_before or {}).get('reg_status', '')
+    existing_payment_date = (fpr_before or {}).get('first_payment_date')
+
+    cur2 = conn.cursor()
+    updates = ["last_update=NOW()"]; params = []
     if reg_status: updates.append("reg_status=%s"); params.append(reg_status)
     if total_paid:
         try: updates.append("total_paid=%s"); params.append(float(total_paid))
         except: pass
     updates.append("description=%s"); params.append(note)
+    if first_payment_date:
+        updates.append("first_payment_date=%s"); params.append(first_payment_date)
     params.append(int(fpr_id))
-    cur.execute(f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s",params)
+    sql = f"UPDATE family_record SET {', '.join(updates)} WHERE id=%s"
+    cur2.execute(sql, params)
+    conn.commit()
+
+    # Send confirmation email if status changed to Complete Registration
+    if reg_status == 'Complete Registration' and old_status != 'Complete Registration':
+        try:
+            cur.execute("SELECT primary_email, first_name_0, last_name_0 FROM family WHERE id=%s", (int(family_id),))
+            family = cur.fetchone()
+            if family:
+                cur.execute("""
+                    SELECT fr.total_due, fr.total_paid, p.name AS period_name
+                    FROM family_record fr JOIN period p ON p.id = fr.pid
+                    WHERE fr.id = %s
+                """, (int(fpr_id),))
+                fpr = cur.fetchone()
+                if fpr and family.get('primary_email'):
+                    _send_email(
+                        to_addr=family['primary_email'],
+                        subject='MFCS — Payment Confirmed & Registration Complete',
+                        text_body=(
+                            f"Dear {family['first_name_0']} {family['last_name_0']},\n\n"
+                            f"Your payment has been confirmed and your registration "
+                            f"for {fpr['period_name']} is now complete.\n\n"
+                            f"Total Paid: ${float(fpr['total_paid'] or 0):.2f}\n"
+                            f"Total Due:  ${float(fpr['total_due'] or 0):.2f}\n\n"
+                            f"Thank you for registering with Monmouth Fidelity Chinese School.\n\n"
+                            f"Monmouth Fidelity Chinese School"
+                        ),
+                        html_body=(
+                            f"<p>Dear {family['first_name_0']} {family['last_name_0']},</p>"
+                            f"<p>Your payment has been confirmed and your registration for "
+                            f"<strong>{fpr['period_name']}</strong> is now complete.</p>"
+                            f"<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse'>"
+                            f"<tr><td><strong>Total Paid</strong></td><td>${float(fpr['total_paid'] or 0):.2f}</td></tr>"
+                            f"<tr><td><strong>Total Due</strong></td><td>${float(fpr['total_due'] or 0):.2f}</td></tr>"
+                            f"</table>"
+                            f"<p>Thank you for registering with Monmouth Fidelity Chinese School. "
+                            f"We look forward to seeing your family!</p>"
+                            f"<p>Monmouth Fidelity Chinese School</p>"
+                        )
+                    )
+        except Exception as e:
+            print(f'Payment confirmation email error: {e}')
+
+    conn.close()
     pid = request.form.get('pid','')
-    conn.commit(); conn.close(); flash('Payment updated.','success')
+    flash('Payment updated.', 'success')
     return redirect(url_for('admin.finance', pid=pid) if pid else url_for('admin.finance'))
 
 # ══ STUDENTS ══════════════════════════════════════════════════════════════════
@@ -1276,36 +1790,272 @@ def update_payment():
 @admin_bp.route('/students/<int:student_id>/edit', methods=['GET','POST'])
 @roles_required('admin','language','culture','finance')
 def edit_student(student_id):
-    """Allow admin/language/culture users to edit student info esp. special_note."""
+    """Edit student info.
+    - admin/language/finance: full edit
+    - culture: current-period culture class (ccgrid/ccgrid2) only;
+               student must have a student_record for the current period.
+    """
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM student WHERE id=%s",(student_id,)); student = cur.fetchone()
-    if not student: conn.close(); flash('Student not found.','error'); return redirect(url_for('admin.students'))
+    cur.execute("SELECT * FROM student WHERE id=%s", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close(); flash('Student not found.', 'error')
+        return redirect(url_for('admin.students'))
+
+    period = _cur_period(cur)
+
+    # ── Culture-only access guard ──────────────────────────────────────────────
+    if current_user.is_culture and not current_user.is_admin and not current_user.is_language:
+        if not period:
+            conn.close(); flash('No active school year — cannot edit culture classes.', 'error')
+            return redirect(url_for('admin.students'))
+        cur.execute("""SELECT sr.*,
+                cc.name  AS cult_class_name,
+                cc2.name AS cult_class2_name
+            FROM student_record sr
+            LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+            LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+            WHERE sr.sid=%s AND sr.pid=%s""",
+                    (student_id, period['id']))
+        sr = cur.fetchone()
+        if not sr:
+            conn.close()
+            flash('This student has no registration for the current school year '
+                  'and cannot be edited here.', 'error')
+            return redirect(url_for('admin.students'))
+
+        # Fetch available culture classes for the dropdowns
+        cur.execute("SELECT id, name, fee FROM class_group_record "
+                    "WHERE pid=%s AND type='culture' ORDER BY name", (period['id'],))
+        cult_classes = cur.fetchall()
+
+        if request.method == 'POST':
+            f            = request.form
+            new_ccgrid   = f.get('ccgrid')  or None
+            new_ccgrid2  = f.get('ccgrid2') or None
+            new_ccgrid   = int(new_ccgrid)  if new_ccgrid  else None
+            new_ccgrid2  = int(new_ccgrid2) if new_ccgrid2 else None
+
+            # Culture 2 requires Culture 1
+            if new_ccgrid2 and not new_ccgrid:
+                conn.close()
+                flash('Culture Class 2 cannot be selected without a Culture Class 1.', 'error')
+                return redirect(url_for('admin.edit_student', student_id=student_id,
+                                        pid=request.form.get('_pid',''),
+                                        cult=request.form.get('_cult','')))
+
+            # Culture 1 and Culture 2 cannot be the same
+            if new_ccgrid and new_ccgrid2 and new_ccgrid == new_ccgrid2:
+                conn.close()
+                flash('Culture Class 1 and Culture Class 2 cannot be the same class.', 'error')
+                return redirect(url_for('admin.edit_student', student_id=student_id,
+                                        pid=request.form.get('_pid',''),
+                                        cult=request.form.get('_cult','')))
+            cur2 = conn.cursor()
+
+            # ── Scenario 2: student is officially assigned — unassign first ──
+            cur.execute("""
+                SELECT ca.crid, cr.cgrid
+                FROM class_assignment ca
+                JOIN class_record cr ON cr.id = ca.crid
+                JOIN class_group_record cgr ON cgr.id = cr.cgrid
+                WHERE ca.srid = %s AND cgr.type = 'culture'
+            """, (sr['id'],))
+            existing_assignments = cur.fetchall()
+            unassigned_count = len(existing_assignments)
+
+            # Get fid and class names before making changes
+            cur.execute("SELECT fid FROM student WHERE id=%s", (student_id,))
+            fid = cur.fetchone()['fid']
+
+            cur.execute("SELECT name FROM class_group_record WHERE id=%s",
+                        (new_ccgrid,)) if new_ccgrid else None
+            new_c1_name = (cur.fetchone() or {}).get('name', '—') if new_ccgrid else '—'
+            cur.execute("SELECT name FROM class_group_record WHERE id=%s",
+                        (new_ccgrid2,)) if new_ccgrid2 else None
+            new_c2_name = (cur.fetchone() or {}).get('name', '—') if new_ccgrid2 else '—'
+
+            # Delete section assignments
+            for asgn in existing_assignments:
+                cur.execute("DELETE FROM class_assignment WHERE crid=%s AND srid=%s",
+                            (asgn['crid'], sr['id']))
+
+            # ── Update student_record culture selections ───────────────────────
+            cur.execute(
+                "UPDATE student_record SET ccgrid=%s, ccgrid2=%s WHERE id=%s",
+                (new_ccgrid, new_ccgrid2, sr['id'])
+            )
+
+            # ── Recalculate family fees + flag pending if needed ───────────────
+            new_total, reverted = _recalc_family_record(cur, fid, period['id'])
+
+            # Append audit note even when fee didn't change
+            if not reverted:
+                unassign_note = f' [{unassigned_count} section assignment(s) removed]' \
+                                if unassigned_count else ''
+                audit = (f" [Culture updated by admin: C1={new_c1_name}, "
+                         f"C2={new_c2_name}{unassign_note}]")
+                cur.execute(
+                    "UPDATE family_record SET description=CONCAT(COALESCE(description,''), %s), "
+                    "last_update=NOW() WHERE fid=%s AND pid=%s",
+                    (audit, fid, period['id'])
+                )
+
+            conn.commit(); conn.close()
+
+            if reverted:
+                flash(f'Culture classes updated. Fee changed to ${new_total:.2f} — '
+                      f'registration set back to Pending.', 'warning')
+            elif unassigned_count:
+                flash(f'Culture classes updated. '
+                      f'{unassigned_count} section assignment(s) were removed.', 'success')
+            else:
+                flash('Culture classes updated.', 'success')
+
+            pid_arg  = request.form.get('_pid', '')
+            cult_arg = request.form.get('_cult', '')
+            return redirect(url_for('admin.students',
+                pid=pid_arg or None, cult=cult_arg or None))
+
+        conn.close()
+        return render_template('admin/edit_student.html', student=student,
+            culture_only=True, language_only=False, student_record=sr,
+            cult_classes=cult_classes, lang_classes=[], period=period,
+            pid=request.args.get('pid', ''),
+            lang=request.args.get('lang', ''),
+            cult=request.args.get('cult', ''))
+
+    # ── Language-only access guard ─────────────────────────────────────────────
+    if current_user.is_language and not current_user.is_admin and not current_user.is_culture:
+        if not period:
+            conn.close(); flash('No active school year — cannot edit language classes.', 'error')
+            return redirect(url_for('admin.students'))
+        cur.execute("""SELECT sr.*,
+                lc.name AS lang_class_name
+            FROM student_record sr
+            LEFT JOIN class_group_record lc ON lc.id = sr.lcgrid
+            WHERE sr.sid=%s AND sr.pid=%s""",
+                    (student_id, period['id']))
+        sr = cur.fetchone()
+        if not sr:
+            conn.close()
+            flash('This student has no registration for the current school year '
+                  'and cannot be edited here.', 'error')
+            return redirect(url_for('admin.students'))
+
+        # Fetch available language classes for the dropdown
+        cur.execute("SELECT id, name FROM class_group_record "
+                    "WHERE pid=%s AND type='language' ORDER BY name", (period['id'],))
+        lang_classes = cur.fetchall()
+
+        if request.method == 'POST':
+            f           = request.form
+            new_lcgrid  = f.get('lcgrid') or None
+            new_lcgrid  = int(new_lcgrid) if new_lcgrid else None
+
+            # lcgrid has a FK constraint — cannot be set to NULL
+            if not new_lcgrid:
+                conn.close()
+                flash('A language class must be selected — it cannot be left empty.', 'error')
+                return redirect(url_for('admin.edit_student', student_id=student_id,
+                                        pid=f.get('_pid',''), lang=f.get('_lang','')))
+            cur2 = conn.cursor()
+
+            # Scenario 2: unassign from any language section first
+            cur.execute("""
+                SELECT ca.crid
+                FROM class_assignment ca
+                JOIN class_record cr ON cr.id = ca.crid
+                JOIN class_group_record cgr ON cgr.id = cr.cgrid
+                WHERE ca.srid = %s AND cgr.type = 'language'
+            """, (sr['id'],))
+            existing_assignments = cur.fetchall()
+            unassigned_count = len(existing_assignments)
+
+            # Get fid and class name before making changes
+            cur.execute("SELECT fid FROM student WHERE id=%s", (student_id,))
+            fid = cur.fetchone()['fid']
+
+            cur.execute("SELECT name FROM class_group_record WHERE id=%s", (new_lcgrid,))
+            new_l_name = (cur.fetchone() or {}).get('name', '—')
+
+            # Delete section assignments
+            for asgn in existing_assignments:
+                cur.execute("DELETE FROM class_assignment WHERE crid=%s AND srid=%s",
+                            (asgn['crid'], sr['id']))
+
+            # Update student_record language selection
+            cur.execute("UPDATE student_record SET lcgrid=%s WHERE id=%s",
+                        (new_lcgrid, sr['id']))
+
+            # Recalculate fees + flag pending if needed
+            new_total, reverted = _recalc_family_record(cur, fid, period['id'])
+
+            if not reverted:
+                unassign_note = f' [{unassigned_count} section assignment(s) removed]' \
+                                if unassigned_count else ''
+                audit = f" [Language updated by admin: L={new_l_name}{unassign_note}]"
+                cur.execute(
+                    "UPDATE family_record SET description=CONCAT(COALESCE(description,''), %s), "
+                    "last_update=NOW() WHERE fid=%s AND pid=%s",
+                    (audit, fid, period['id'])
+                )
+
+            conn.commit(); conn.close()
+
+            if reverted:
+                flash(f'Language class updated. Fee changed to ${new_total:.2f} — '
+                      f'registration set back to Pending.', 'warning')
+            elif unassigned_count:
+                flash(f'Language class updated. '
+                      f'{unassigned_count} section assignment(s) were removed.', 'success')
+            else:
+                flash('Language class updated.', 'success')
+
+            pid_arg  = request.form.get('_pid', '')
+            lang_arg = request.form.get('_lang', '')
+            return redirect(url_for('admin.students',
+                pid=pid_arg or None, lang=lang_arg or None))
+
+        conn.close()
+        return render_template('admin/edit_student.html', student=student,
+            culture_only=False, language_only=True, student_record=sr,
+            lang_classes=lang_classes, cult_classes=[], period=period,
+            pid=request.args.get('pid', ''),
+            lang=request.args.get('lang', ''),
+            cult=request.args.get('cult', ''))
+
+    # ── Full edit — admin / finance ────────────────────────────────────────────
     if request.method == 'POST':
         f = request.form
+        media_consent = 1 if f.get('media_consent') == '1' else 0
         cur.execute("""UPDATE student SET
                 first_name=%s, last_name=%s, chinese_name=%s,
                 gender=%s, birthday=%s, phone=%s, email=%s,
                 ec_first_name=%s, ec_last_name=%s, ec_phone=%s,
-                special_note=%s WHERE id=%s""",
+                special_note=%s, media_consent=%s WHERE id=%s""",
                 (f.get('first_name',''), f.get('last_name',''),
                  f.get('chinese_name','?'), f.get('gender','?'),
                  f.get('birthday','').strip() or '2999-01-01',
                  f.get('phone','?'), f.get('email','?'),
                  f.get('ec_first_name','?'), f.get('ec_last_name','?'),
-                 f.get('ec_phone','?'), f.get('special_note',''), student_id))
+                 f.get('ec_phone','?'), f.get('special_note',''),
+                 media_consent, student_id))
         conn.commit(); conn.close()
-        flash('Student updated.','success')
-        # Preserve filter params so user returns to same filtered view
-        pid        = request.form.get('_pid','')
-        lang_filter= request.form.get('_lang','')
-        cult_filter= request.form.get('_cult','')
+        flash('Student updated.', 'success')
+        pid_arg  = request.form.get('_pid', '')
+        lang_arg = request.form.get('_lang', '')
+        cult_arg = request.form.get('_cult', '')
         return redirect(url_for('admin.students',
-            pid=pid or None, lang=lang_filter or None, cult=cult_filter or None))
+            pid=pid_arg or None, lang=lang_arg or None, cult=cult_arg or None))
+
     conn.close()
     return render_template('admin/edit_student.html', student=student,
-        pid=request.args.get('pid',''),
-        lang=request.args.get('lang',''),
-        cult=request.args.get('cult',''))
+        culture_only=False, language_only=False, student_record=None,
+        cult_classes=[], lang_classes=[], period=period,
+        pid=request.args.get('pid', ''),
+        lang=request.args.get('lang', ''),
+        cult=request.args.get('cult', ''))
 
 @admin_bp.route('/students')
 @admin_required
@@ -1313,8 +2063,11 @@ def students():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur); plist = _periods_list(cur)
     pid = request.args.get('pid', period['id'] if period else None)
-    lang_filter = request.args.get('lang','')
-    cult_filter = request.args.get('cult','')
+    lang_filter  = request.args.get('lang','')
+    cult_filter  = request.args.get('cult','')
+    name_filter  = request.args.get('name','').strip()
+    media_filter = request.args.get('media','')
+    note_filter  = request.args.get('note','').strip()
     lang_classes = []; cult_classes = []; rows = []
     sel = None
     if pid:
@@ -1323,9 +2076,23 @@ def students():
         lang_classes = cur.fetchall()
         cur.execute("SELECT id,name FROM class_group_record WHERE pid=%s AND type='culture' ORDER BY name",(pid,))
         cult_classes = cur.fetchall()
-        where = ["sr.pid=%s"]; params = [pid]
+        where = ["sr.pid=%s",
+                 "(sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)"]
+        params = [pid]
         if lang_filter: where.append("sr.lcgrid=%s"); params.append(int(lang_filter))
         if cult_filter: where.append("(sr.ccgrid=%s OR sr.ccgrid2=%s)"); params.extend([int(cult_filter),int(cult_filter)])
+        if name_filter:
+            like = f"%{name_filter}%"
+            where.append("(s.last_name LIKE %s OR s.first_name LIKE %s OR s.chinese_name LIKE %s)")
+            params.extend([like, like, like])
+        if media_filter == 'optin':
+            where.append("(s.media_consent IS NULL OR s.media_consent != 0)")
+        elif media_filter == 'optout':
+            where.append("s.media_consent = 0")
+        if note_filter == 'has_note':
+            where.append("(s.special_note IS NOT NULL AND s.special_note != '')")
+        elif note_filter == 'no_note':
+            where.append("(s.special_note IS NULL OR s.special_note = '')")
         cur.execute(f"""SELECT s.*,f.last_name_0 AS family_last,f.first_name_0 AS family_first,
             f.primary_email AS family_email,f.id AS family_id,
             lc.name AS lang_class,cc.name AS cult_class,cc2.name AS cult_class2
@@ -1336,11 +2103,15 @@ def students():
             LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
             WHERE {' AND '.join(where)} ORDER BY s.last_name,s.first_name""", params)
         rows = cur.fetchall()
+    from datetime import date as _date
     conn.close()
     return render_template('admin/students.html',
         students=rows, period=sel, periods_list=plist,
         lang_classes=lang_classes, cult_classes=cult_classes,
-        lang_filter=lang_filter, cult_filter=cult_filter, pid=pid)
+        lang_filter=lang_filter, cult_filter=cult_filter,
+        name_filter=name_filter, media_filter=media_filter,
+        note_filter=note_filter, pid=pid,
+        today=_date.today())
 
 # ══ CSV EXPORTS ════════════════════════════════════════════════════════════════
 
@@ -1365,23 +2136,330 @@ def export_families():
     output=io.StringIO()
     output.write('\ufeff')  # UTF-8 BOM for Excel
     if rows:
-        w=csv.DictWriter(output,fieldnames=rows[0].keys())
+        for r in rows:
+            for f in ('primary_phone',):
+                if r.get(f): r[f] = '\t' + str(r[f])
+        w=csv.DictWriter(output, fieldnames=rows[0].keys(), quoting=csv.QUOTE_ALL)
         w.writeheader(); w.writerows(rows)
     return Response(output.getvalue(),mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition':'attachment; filename=mfcs_families.csv'})
 
-@admin_bp.route('/export/students')
+
+@admin_bp.route('/export/finance')
 @roles_required('admin','finance')
+def export_finance():
+    from routes.family import _is_adult, _effective_tuition, _calc_total_family_fee
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    period = _cur_period(cur)
+    pid = request.args.get('pid', period['id'] if period else 0)
+    status = request.args.get('status', 'all')
+    sc = ''
+    if status == 'complete': sc = "AND fr.reg_status='Complete Registration'"
+    elif status == 'pending': sc = "AND fr.reg_status='Pending'"
+
+    # Get all families with registrations
+    cur.execute(f"""
+        SELECT f.id AS family_id, f.last_name_0, f.first_name_0,
+               f.primary_email, f.primary_phone,
+               fr.id AS fpr_id, fr.total_due, fr.total_paid,
+               fr.reg_status, fr.description AS payment_note, fr.last_update
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        WHERE fr.pid = %s {sc}
+        ORDER BY f.last_name_0, f.first_name_0
+    """, (pid,))
+    families = cur.fetchall()
+
+    # Get per-family student details
+    cur.execute("""
+        SELECT s.id, s.fid, s.last_name, s.first_name, s.is_adult, s.mfcs_affiliation,
+               s.birthday,
+               sr.pid,
+               lc.name AS lang_class,
+               cc.name  AS cult_class,  cc.fee  AS cult_fee,  cc.discount  AS cult_disc,
+               cc2.name AS cult_class2, cc2.fee AS cult_fee2, cc2.discount AS cult_disc2
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        LEFT JOIN class_group_record lc  ON lc.id  = sr.lcgrid
+        LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+        LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE sr.pid = %s
+        ORDER BY s.fid, s.last_name, s.first_name
+    """, (pid,))
+    all_students = cur.fetchall()
+
+    period_row = cur.execute("SELECT * FROM period WHERE id=%s", (pid,)) or None
+    period_data = cur.fetchone()
+    reg_fee = float(period_data.get('registration_fee') or 0) if period_data else 0
+    pa_fee  = float(period_data.get('pa_assignment_deposit') or 0) if period_data else 0
+    disc_per = float(period_data.get('discount') or 0) if period_data else 0
+    conn.close()
+
+    # Group students by family
+    from collections import defaultdict
+    students_by_fid = defaultdict(list)
+    for s in all_students:
+        students_by_fid[s['fid']].append(s)
+
+    output = io.StringIO()
+    output.write('\ufeff')
+    w = csv.writer(output, quoting=csv.QUOTE_ALL)
+    w.writerow([
+        'Family Last Name', 'Family First Name', 'Email', 'Phone',
+        'Student Last Name', 'Student First Name', 'Student Type',
+        'Language Class',
+        'Culture 1', 'Culture 1 Fee',
+        'Culture 2', 'Culture 2 Fee',
+        'Tuition', 'Student Subtotal',
+        'Registration Fee', 'PA Duty Deposit', 'Multi-Child Discount',
+        'Total Due', 'Amount Paid', 'Balance',
+        'Status', 'Payment Note', 'Last Update'
+    ])
+
+    for fam in families:
+        fid = fam['family_id']
+        students = students_by_fid.get(fid, [])
+        minor_count = sum(1 for s in students if not _is_adult(s))
+        extra_kids  = max(0, minor_count - 2)
+        multi_disc  = extra_kids * disc_per
+        phone = '\t' + str(fam['primary_phone']) if fam.get('primary_phone') else ''
+
+        if not students:
+            w.writerow([
+                fam['last_name_0'], fam['first_name_0'],
+                fam['primary_email'], phone,
+                '', '', '', '', '', '', '', '', '', '',
+                reg_fee, pa_fee, -multi_disc,
+                fam['total_due'] or 0, fam['total_paid'] or 0,
+                (fam['total_due'] or 0) - (fam['total_paid'] or 0),
+                fam['reg_status'], fam['payment_note'] or '', fam['last_update']
+            ])
+        else:
+            for i, s in enumerate(students):
+                adult = _is_adult(s)
+                mfcs  = s.get('mfcs_affiliation') == 'Y'
+                cf1_raw = float(s.get('cult_fee')  or 0)
+                cf2_raw = float(s.get('cult_fee2') or 0)
+                d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+                d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+                cf1 = max(0, cf1_raw - d1)
+                cf2 = max(0, cf2_raw - d2)
+                tuition = 0.0 if adult else float(period_data.get('tuition') or 0)
+                st_sub  = tuition + cf1 + cf2
+                student_type = 'Adult' if adult else 'Non-adult'
+                if adult: student_type += ' (MFCS)' if mfcs else ' (General)'
+
+                # Family-level fees only on first student row
+                if i == 0:
+                    row_reg_fee = reg_fee
+                    row_pa_fee  = pa_fee
+                    row_disc    = -multi_disc
+                    row_total   = fam['total_due'] or 0
+                    row_paid    = fam['total_paid'] or 0
+                    row_balance = row_total - row_paid
+                    row_status  = fam['reg_status']
+                    row_note    = fam['payment_note'] or ''
+                    row_update  = fam['last_update']
+                else:
+                    row_reg_fee = row_pa_fee = row_disc = ''
+                    row_total = row_paid = row_balance = ''
+                    row_status = row_note = row_update = ''
+
+                w.writerow([
+                    fam['last_name_0'], fam['first_name_0'],
+                    fam['primary_email'] if i == 0 else '',
+                    phone if i == 0 else '',
+                    s['last_name'], s['first_name'], student_type,
+                    s.get('lang_class') or '—',
+                    s.get('cult_class') or '—', f'${cf1:.2f}' if cf1 else '—',
+                    s.get('cult_class2') or '—', f'${cf2:.2f}' if cf2 else '—',
+                    f'${tuition:.2f}' if not adult else 'N/A',
+                    f'${st_sub:.2f}',
+                    f'${row_reg_fee:.2f}' if row_reg_fee != '' else '',
+                    f'${row_pa_fee:.2f}'  if row_pa_fee  != '' else '',
+                    f'${row_disc:.2f}'    if row_disc     != '' else '',
+                    f'${row_total:.2f}'   if row_total    != '' else '',
+                    f'${row_paid:.2f}'    if row_paid     != '' else '',
+                    f'${row_balance:.2f}' if row_balance  != '' else '',
+                    row_status, row_note, row_update
+                ])
+
+    return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=mfcs_finance.csv'})
+
+@admin_bp.route('/export/finance/summary')
+@roles_required('admin','finance')
+def export_finance_summary():
+    pid = request.args.get('pid')
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    if not pid:
+        period = _cur_period(cur)
+        pid = period['id'] if period else None
+    if not pid:
+        conn.close()
+        return Response('No period selected.', status=400)
+
+    cur.execute("SELECT * FROM period WHERE id=%s", (pid,))
+    period_data = cur.fetchone() or {}
+    reg_fee  = float(period_data.get('registration_fee') or 0)
+    pa_fee   = float(period_data.get('pa_assignment_deposit') or 0)
+    disc_per = float(period_data.get('discount') or 0)
+    late_fee_per = float(period_data.get('late_fee') or 0)
+
+    # Get all culture classes for this period to use as dynamic columns
+    cur.execute("""SELECT id, name FROM class_group_record
+                   WHERE pid=%s AND type='culture' ORDER BY name""", (pid,))
+    cult_classes = cur.fetchall()
+    cult_ids   = [c['id'] for c in cult_classes]
+    cult_names = [c['name'] for c in cult_classes]
+
+    # Get all families with enrollments
+    cur.execute("""
+        SELECT DISTINCT f.id AS family_id, f.last_name_0, f.first_name_0,
+               f.primary_email, f.primary_phone,
+               fr.id AS fpr_id, fr.total_due, fr.total_paid, fr.adjustment,
+               fr.reg_status, fr.description AS payment_note, fr.last_update,
+               fr.late_fee_waived, fr.reg_fee_waived, fr.first_payment_date,
+               fr.tuition_override
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        WHERE fr.pid=%s
+        ORDER BY f.last_name_0, f.first_name_0
+    """, (pid,))
+    families = cur.fetchall()
+
+    # Get all enrolled students
+    cur.execute("""
+        SELECT s.id, s.fid, s.last_name, s.first_name, s.is_adult,
+               s.mfcs_affiliation, s.birthday,
+               sr.lcgrid, sr.ccgrid, sr.ccgrid2,
+               cc.fee AS cult_fee, cc.discount AS cult_disc, cc.id AS cult_id,
+               cc2.fee AS cult_fee2, cc2.discount AS cult_disc2, cc2.id AS cult_id2
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        LEFT JOIN class_group_record cc  ON cc.id  = sr.ccgrid
+        LEFT JOIN class_group_record cc2 ON cc2.id = sr.ccgrid2
+        WHERE sr.pid=%s
+        AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+    """, (pid,))
+    all_students = cur.fetchall()
+    conn.close()
+
+    from routes.family import _is_adult, _effective_tuition, _is_returning_family, _should_charge_late_fee, _is_late
+
+    # Group students by family
+    from collections import defaultdict
+    students_by_fid = defaultdict(list)
+    for s in all_students:
+        students_by_fid[s['fid']].append(s)
+
+    # Build CSV
+    output = io.StringIO()
+    w = csv.writer(output, quoting=csv.QUOTE_ALL)
+
+    # Header
+    header = [
+        'Last Name', 'First Name', 'Email', 'Phone',
+        'Tuition Total', '# Minors', 'Tuition per Minor',
+    ] + cult_names + [
+        'Registration Fee', 'Late Fee', 'PA Duty Deposit',
+        'Multi-Child Discount', 'Total Due', 'Amount Paid',
+        'Outstanding Balance', 'Status', 'First Payment Date', 'Payment Note'
+    ]
+    w.writerow(header)
+
+    for fam in families:
+        fid      = fam['family_id']
+        students = students_by_fid.get(fid, [])
+
+        # Get effective tuition
+        _conn_t = get_db_connection()
+        eff_tuit, _ = _effective_tuition(period_data, fid, _conn_t)
+        _conn_t.close()
+
+        # Calculate per-student fees
+        minor_count = 0
+        tuition_total = 0.0
+        # Per-culture-class totals
+        cult_totals = {cid: 0.0 for cid in cult_ids}
+
+        for s in students:
+            adult = _is_adult(s)
+            mfcs  = s.get('mfcs_affiliation') == 'Y'
+            cf1_raw = float(s.get('cult_fee')  or 0)
+            cf2_raw = float(s.get('cult_fee2') or 0)
+            d1 = float(s.get('cult_disc')  or 0) if mfcs else 0
+            d2 = float(s.get('cult_disc2') or 0) if mfcs else 0
+            cf1 = max(0, cf1_raw - d1)
+            cf2 = max(0, cf2_raw - d2)
+            if not adult:
+                minor_count += 1
+                tuition_total += eff_tuit
+            # Accumulate culture class fees
+            cid1 = s.get('cult_id')
+            cid2 = s.get('cult_id2')
+            if cid1 and cid1 in cult_totals: cult_totals[cid1] += cf1
+            if cid2 and cid2 in cult_totals: cult_totals[cid2] += cf2
+
+        extra_kids = max(0, minor_count - 2)
+        multi_disc = extra_kids * disc_per
+
+        # Late fee
+        _conn_l = get_db_connection()
+        charge_late, per_minor = _should_charge_late_fee(
+            period_data, fid, int(pid),
+            float(fam.get('total_paid') or 0),
+            bool(fam.get('late_fee_waived', 0)),
+            _conn_l,
+            first_payment_date=fam.get('first_payment_date')
+        )
+        _conn_l.close()
+        late_fee_total = minor_count * per_minor if charge_late else 0.0
+
+        # Reg fee
+        fam_reg_fee = 0.0 if fam.get('reg_fee_waived') else (reg_fee if minor_count > 0 else 0.0)
+        fam_pa_fee  = pa_fee if minor_count > 0 else 0.0
+
+        total_due    = fam.get('total_due') or 0
+        total_paid   = fam.get('total_paid') or 0
+        balance      = float(total_due) - float(total_paid)
+        phone        = '\t' + str(fam['primary_phone']) if fam.get('primary_phone') else ''
+        fpd          = fam.get('first_payment_date') or ''
+        if hasattr(fpd, 'strftime'): fpd = fpd.strftime('%Y-%m-%d')
+
+        row = [
+            fam['last_name_0'], fam['first_name_0'],
+            fam['primary_email'], phone,
+            round(tuition_total), minor_count, round(eff_tuit) if minor_count > 0 else 0,
+        ] + [round(cult_totals.get(cid, 0)) for cid in cult_ids] + [
+            round(fam_reg_fee), round(late_fee_total), round(fam_pa_fee),
+            round(-multi_disc), round(float(total_due)), round(float(total_paid)),
+            round(balance),
+            fam.get('reg_status') or '',
+            str(fpd),
+            fam.get('payment_note') or ''
+        ]
+        w.writerow(row)
+
+    period_name = (period_data.get('name') or 'export').replace(' ', '_')
+    return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename=mfcs_finance_summary_{period_name}.csv'})
+
+
+@admin_bp.route('/export/students')
+@roles_required('admin','finance','language','culture')
 def export_students():
     conn=get_db_connection(); cur=conn.cursor(dictionary=True)
     period=_cur_period(cur)
     pid         = request.args.get('pid', period['id'] if period else 0)
     lang_filter = request.args.get('lang','')
     cult_filter = request.args.get('cult','')
-    extra = []; params = [pid]
-    if lang_filter: extra.append("AND sr.lcgrid=%s"); params.append(int(lang_filter))
-    if cult_filter: extra.append("AND (sr.ccgrid=%s OR sr.ccgrid2=%s)"); params.extend([int(cult_filter),int(cult_filter)])
-    params.append(pid)  # for family_record join
+    extra = []; filter_params = []
+    if lang_filter: extra.append("AND sr.lcgrid=%s"); filter_params.append(int(lang_filter))
+    if cult_filter: extra.append("AND (sr.ccgrid=%s OR sr.ccgrid2=%s)"); filter_params.extend([int(cult_filter),int(cult_filter)])
+    # param order: pid (for family_record join), pid (for WHERE sr.pid), then filters
+    params = [pid, pid] + filter_params
     cur.execute(f"""SELECT s.id,s.last_name,s.first_name,s.chinese_name,s.gender,s.birthday,
         s.special_note,
         f.last_name_0 AS family_last,f.first_name_0 AS family_first,
@@ -1400,7 +2478,43 @@ def export_students():
     output=io.StringIO()
     output.write('\ufeff')  # UTF-8 BOM for Excel
     if rows:
-        w=csv.DictWriter(output,fieldnames=rows[0].keys())
+        for r in rows:
+            for f in ('primary_phone',):
+                if r.get(f): r[f] = '\t' + str(r[f])
+        w=csv.DictWriter(output, fieldnames=rows[0].keys(), quoting=csv.QUOTE_ALL)
         w.writeheader(); w.writerows(rows)
     return Response(output.getvalue(),mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition':'attachment; filename=mfcs_students.csv'})
+
+@admin_bp.route('/export/staff')
+@roles_required('admin','language','culture')
+def export_staff():
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    period = _cur_period(cur)
+    pid   = request.args.get('pid', period['id'] if period else 0)
+    stype = request.args.get('type', 'all')
+    extra = []; params = [pid]
+    if stype != 'all':
+        extra.append("AND tr.type=%s"); params.append(stype)
+    cur.execute(f"""SELECT tr.last_name, tr.first_name, tr.chinese_name,
+        tr.type, tr.phone, tr.email,
+        GROUP_CONCAT(DISTINCT cgr.name ORDER BY cgr.name SEPARATOR '; ') AS classes
+        FROM teacher_record tr
+        LEFT JOIN class_assignment ca ON ca.trid=tr.id
+        LEFT JOIN class_record cr ON cr.id=ca.crid
+        LEFT JOIN class_group_record cgr ON cgr.id=cr.cgrid
+        WHERE tr.pid=%s {' '.join(extra)}
+        GROUP BY tr.id
+        ORDER BY tr.type, tr.last_name, tr.first_name""", params)
+    rows = cur.fetchall(); conn.close()
+    output = io.StringIO()
+    output.write('\ufeff')  # UTF-8 BOM for Excel
+    if rows:
+        # Prefix phone with a tab so Excel treats it as text, not a number
+        for r in rows:
+            if r.get('phone'):
+                r['phone'] = '\t' + str(r['phone'])
+        w = csv.DictWriter(output, fieldnames=rows[0].keys(), quoting=csv.QUOTE_ALL)
+        w.writeheader(); w.writerows(rows)
+    return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition':'attachment; filename=mfcs_staff.csv'})
