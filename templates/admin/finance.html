@@ -97,7 +97,7 @@
     <tbody>
       {% for r in registrations %}
       {% set needs_attention = r.reg_status == 'Pending' and r.description and 'Fee updated' in r.description %}
-      {% set detail_rows = breakdown.get(r.family_id, []) %}
+      {% set detail_rows = r.student_details if r.student_details is defined else [] %}
       <tr class="{{ 'table-success' if r.reg_status == 'Complete Registration' else ('table-warning' if needs_attention) }}">
         <td class="fw-500">
           {{ r.last_name_0 }}, {{ r.first_name_0 }}
@@ -161,17 +161,17 @@
               {% for d in detail_rows %}
               <tr class="small">
                 <td style="padding-left:2rem">{{ d.last_name }}, {{ d.first_name }}</td>
-                <td>{% if d.is_adult %}N/A{% else %}{{ d.lang_name or '—' }}{% endif %}</td>
-                <td>{{ d.cult1_name or '—' }}</td>
-                <td>{{ d.cult2_name or '—' }}</td>
+                <td>{% if d.is_adult %}N/A{% else %}{{ d.lang_class or '—' }}{% endif %}</td>
+                <td>{{ d.cult_class or '—' }}</td>
+                <td>{{ d.cult_class2 or '—' }}</td>
                 <td class="text-muted">
                   {% if d.is_adult %}
-                    Culture {{ d.cult1_fee|currency }}{% if d.cult2_fee %} + {{ d.cult2_fee|currency }}{% endif %}
+                    Culture {{ d.cf1|currency }}{% if d.cf2 %} + {{ d.cf2|currency }}{% endif %}
                   {% else %}
-                    Tuition + {% if d.cult1_name %}Culture{% endif %}{% if d.cult2_name %} + Culture 2{% endif %}
+                    Tuition + {% if d.cult_class %}Culture{% endif %}{% if d.cult_class2 %} + Culture 2{% endif %}
                   {% endif %}
                 </td>
-                <td class="text-end fw-500">{{ d.display_fee|currency }}</td>
+                <td class="text-end fw-500">{{ d.student_fee|currency }}</td>
               </tr>
               {% endfor %}
               <tr class="small table-light">
