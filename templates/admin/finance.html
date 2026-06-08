@@ -97,6 +97,7 @@
     <tbody>
       {% for r in registrations %}
       {% set needs_attention = r.reg_status == 'Pending' and r.description and 'Fee updated' in r.description %}
+      {% set detail_rows = breakdown.get(r.family_id, []) %}
       <tr class="{{ 'table-success' if r.reg_status == 'Complete Registration' else ('table-warning' if needs_attention) }}">
         <td class="fw-500">
           {{ r.last_name_0 }}, {{ r.first_name_0 }}
@@ -120,20 +121,71 @@
           </span>
         </td>
         <td>
-          <button class="btn btn-sm btn-outline-secondary"
-                  data-bs-toggle="modal"
-                  data-bs-target="#payModal"
-                  data-fpr="{{ r.fpr_id }}"
-                  data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
-                  data-due="{{ r.total_due or 0 }}"
-                  data-paid="{{ r.total_paid or 0 }}"
-                  data-note="{{ r.description or '' }}"
-                  data-status="{{ r.reg_status }}"
-                  data-pid="{{ selected_period.id if selected_period else '' }}">
-            Update
-          </button>
+          <div class="d-flex gap-1">
+            {% if detail_rows %}
+            <button class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#detail-{{ r.fpr_id }}"
+                    title="Show fee breakdown">⊕</button>
+            {% endif %}
+            <button class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#payModal"
+                    data-fpr="{{ r.fpr_id }}"
+                    data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
+                    data-due="{{ r.total_due or 0 }}"
+                    data-paid="{{ r.total_paid or 0 }}"
+                    data-note="{{ r.description or '' }}"
+                    data-status="{{ r.reg_status }}"
+                    data-pid="{{ selected_period.id if selected_period else '' }}">
+              Update
+            </button>
+          </div>
         </td>
       </tr>
+      {% if detail_rows %}
+      <tr class="collapse" id="detail-{{ r.fpr_id }}">
+        <td colspan="8" class="p-0">
+          <table class="table table-sm mb-0" style="background:#f8f9fa">
+            <thead>
+              <tr class="text-muted small">
+                <th style="padding-left:2rem">Student</th>
+                <th>Language</th>
+                <th>Culture 1</th>
+                <th>Culture 2</th>
+                <th>Breakdown</th>
+                <th class="text-end">Fee</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in detail_rows %}
+              <tr class="small">
+                <td style="padding-left:2rem">{{ d.last_name }}, {{ d.first_name }}</td>
+                <td>{% if d.is_adult %}N/A{% else %}{{ d.lang_name or '—' }}{% endif %}</td>
+                <td>{{ d.cult1_name or '—' }}</td>
+                <td>{{ d.cult2_name or '—' }}</td>
+                <td class="text-muted">
+                  {% if d.is_adult %}
+                    Culture {{ d.cult1_fee|currency }}{% if d.cult2_fee %} + {{ d.cult2_fee|currency }}{% endif %}
+                  {% else %}
+                    Tuition + {% if d.cult1_name %}Culture{% endif %}{% if d.cult2_name %} + Culture 2{% endif %}
+                  {% endif %}
+                </td>
+                <td class="text-end fw-500">{{ d.display_fee|currency }}</td>
+              </tr>
+              {% endfor %}
+              <tr class="small table-light">
+                <td colspan="5" class="text-end text-muted" style="padding-left:2rem">
+                  Student subtotal + Reg {{ (selected_period.registration_fee or 0)|currency }}
+                  + PA {{ (selected_period.pa_assignment_deposit or 0)|currency }}
+                </td>
+                <td class="text-end fw-600">{{ (r.total_due or 0)|currency }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </td>
+      </tr>
+      {% endif %}
       {% else %}
       <tr><td colspan="8" class="text-muted text-center py-4">No registrations found.</td></tr>
       {% endfor %}

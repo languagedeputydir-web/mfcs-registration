@@ -996,9 +996,54 @@ def finance():
         regs = cur.fetchall()
         for r in regs:
             r['balance'] = float(r['total_due'] or 0)-float(r['total_paid'] or 0)-float(r['adjustment'] or 0)
+        # Fetch per-student breakdown for detail rows
+        if regs and sel:
+            from routes.family import _calc_student_fee, _is_adult
+            cur.execute("""SELECT s.fid, s.first_name, s.last_name, s.birthday,
+                lc.name AS lang_name,
+                cc.name  AS cult1_name, COALESCE(cc.fee,0)  AS cult1_fee,
+                cc2.name AS cult2_name, COALESCE(cc2.fee,0) AS cult2_fee
+                FROM student_record sr
+                JOIN student s ON s.id=sr.sid
+                LEFT JOIN class_group_record lc  ON lc.id=sr.lcgrid
+                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+                WHERE sr.pid=%s
+                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+                ORDER BY s.last_name, s.first_name""", (pid,))
+            student_rows = cur.fetchall()
+            # Build breakdown map: fid → list of student dicts with fees
+            breakdown = {}
+            for sr in student_rows:
+                fid = sr['fid']
+                # Back-calculate tuition for this family
+                fpr_match = next((r for r in regs if r['family_id']==fid), None)
+                period_tuition = float(sel.get('tuition') or 0)
+                if fpr_match and fpr_match.get('total_due') and sel.get('grandfathered_tuition'):
+                    saved = float(fpr_match['total_due'])
+                    gf  = float(sel['grandfathered_tuition'])
+                    std = float(sel['tuition'])
+                    fam_students = [x for x in student_rows if x['fid']==fid]
+                    old_cult = sum(float(x['cult1_fee']) + float(x['cult2_fee']) for x in fam_students)
+                    minors   = sum(1 for x in fam_students if not _is_adult(x))
+                    reg_fee  = float(sel.get('registration_fee') or 0)
+                    pa_fee   = float(sel.get('pa_assignment_deposit') or 0)
+                    if minors > 0:
+                        implied = (saved - old_cult - reg_fee - pa_fee) / minors
+                        if abs(implied - gf) <= 1.0:   period_tuition = gf
+                        elif abs(implied - std) <= 1.0: period_tuition = std
+                period_dict = {**sel, 'tuition': period_tuition}
+                fee = _calc_student_fee({'birthday': sr['birthday']}, period_dict,
+                                        float(sr['cult1_fee']), float(sr['cult2_fee']))
+                if fid not in breakdown: breakdown[fid] = []
+                breakdown[fid].append({**sr, 'display_fee': fee,
+                    'is_adult': _is_adult({'birthday': sr['birthday']})})
+        else:
+            breakdown = {}
     conn.close()
     return render_template('admin/finance.html',
         periods_list=plist, selected_period=sel, registrations=regs,
+        breakdown=breakdown,
         status_filter=status, current_period=period, pid=pid)
 
 @admin_bp.route('/finance/update', methods=['POST'])

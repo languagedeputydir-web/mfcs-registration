@@ -188,11 +188,11 @@
       </tr>
       <tr>
         <td>Registration fee <span class="text-muted small">(non-refundable)</span></td>
-        <td class="text-end">{{ (period.registration_fee or 0)|currency }}</td>
+        <td class="text-end" id="fee-reg">{{ (period.registration_fee or 0)|currency }}</td>
       </tr>
       <tr>
         <td>PA Assignment Duty deposit <span class="text-muted small">(refundable)</span></td>
-        <td class="text-end">{{ (period.pa_assignment_deposit or 0)|currency }}</td>
+        <td class="text-end" id="fee-pa">{{ (period.pa_assignment_deposit or 0)|currency }}</td>
       </tr>
       <tr class="table-dark">
         <td class="fw-600">Estimated Total</td>
@@ -285,10 +285,14 @@ function calcFees() {
   {% endfor %}
 
   const hasAnyClass = subtotal > 0;
+  const regFeeDisplay  = hasAnyClass ? REG_FEE : 0;
+  const paFeeDisplay   = hasAnyClass ? PA_FEE  : 0;
   const grand = hasAnyClass ? subtotal + REG_FEE + PA_FEE : 0;
   const fmtSub = fmt(subtotal);
   document.getElementById('fee-subtotal').textContent  = fmtSub;
   document.getElementById('fee-subtotal2').textContent = fmtSub;
+  document.getElementById('fee-reg').textContent       = fmt(regFeeDisplay);
+  document.getElementById('fee-pa').textContent        = fmt(paFeeDisplay);
   document.getElementById('fee-total').textContent     = fmt(grand);
 }
 
