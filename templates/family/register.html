@@ -267,14 +267,16 @@ function calcFees() {
     document.getElementById('fee-cult2-' + sid).textContent =
       c2Val ? (CULT_NAMES[sid][c2Val] || '—') : '—';
 
-    // Calculate fee and breakdown note
-    let fee   = isAdult ? 0 : EFF_TUITION;
-    fee += cf1 + cf2;
+    // Only count fee if at least one class is selected
+    const hasAny = langVal || c1Val || c2Val;
+    let fee   = 0;
     let parts = [];
-    if (!isAdult && EFF_TUITION > 0) parts.push('Tuition ' + fmt(EFF_TUITION));
-    if (cf1 > 0) parts.push('Culture ' + fmt(cf1));
-    if (cf2 > 0) parts.push('Culture 2 ' + fmt(cf2));
-    if (isAdult && cf1 === 0 && cf2 === 0) parts.push('Adult — no culture selected');
+    if (hasAny) {
+      if (!isAdult && EFF_TUITION > 0) { fee += EFF_TUITION; parts.push('Tuition ' + fmt(EFF_TUITION)); }
+      if (cf1 > 0) { fee += cf1; parts.push('Culture ' + fmt(cf1)); }
+      if (cf2 > 0) { fee += cf2; parts.push('Culture 2 ' + fmt(cf2)); }
+      if (isAdult && cf1 === 0 && cf2 === 0) parts.push('Adult — no culture selected');
+    }
 
     document.getElementById('fee-note-' + sid).textContent = parts.join(' + ') || '—';
     document.getElementById('fee-amt-'  + sid).textContent = fee > 0 ? fmt(fee) : '—';
