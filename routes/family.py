@@ -607,7 +607,7 @@ def resend_verification():
 @login_required
 def dashboard():
     from models import Family
-    if isinstance(current_user, Family) and not current_user.address_verified:
+    if isinstance(current_user, Family) and not getattr(current_user, 'address_verified', True):
         flash('Please update your home address before continuing.', 'warning')
         return redirect(url_for('family.profile'))
     conn = get_db_connection()
