@@ -1000,6 +1000,8 @@ def register_classes(period_id):
                            existing=existing,
                            eff_tuition=eff_tuition,
                            tuition_type=tuition_type,
+                           cult_fee_map={str(c['id']): float(c.get('fee') or 0)
+                                         for c in all_cult_classes},
                            is_late=is_late_flag,
                            late_fee_amount=late_fee_amount,
                            reg_fee_waived=reg_fee_waived,
