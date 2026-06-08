@@ -284,7 +284,8 @@ function calcFees() {
   }
   {% endfor %}
 
-  const grand = subtotal + REG_FEE + PA_FEE;
+  const hasAnyClass = subtotal > 0;
+  const grand = hasAnyClass ? subtotal + REG_FEE + PA_FEE : 0;
   const fmtSub = fmt(subtotal);
   document.getElementById('fee-subtotal').textContent  = fmtSub;
   document.getElementById('fee-subtotal2').textContent = fmtSub;
