@@ -210,7 +210,7 @@
             <input type="hidden" name="override" value="standard">
             <button type="submit" class="btn btn-sm btn-success"
                     title="Currently using grandfathered tuition — click to switch to standard rate">
-              ✦ GF Tuition
+              ✦ Set Standard Tuition
             </button>
           </form>
           {% else %}
@@ -219,8 +219,8 @@
             <input type="hidden" name="pid" value="{{ pid }}">
             <input type="hidden" name="override" value="grandfathered">
             <button type="submit" class="btn btn-sm btn-outline-success"
-                    title="Click to switch this family to grandfathered tuition rate">
-              Set GF Tuition
+                    title="Currently using standard tuition — click to switch to grandfathered rate">
+              Set Grandfathered Tuition
             </button>
           </form>
           {% endif %}
