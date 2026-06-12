@@ -1605,7 +1605,17 @@ def set_tuition_override():
     period_dict['id'] = int(pid) if pid else 0
 
     conn2 = get_db_connection()
-    eff_tuit, tuit_type = _effective_tuition(period_dict, row['fid'], conn2)
+
+    # Use the override rate directly — don't call _effective_tuition which
+    # ignores the override and may return wrong rate after deadline
+    if new_override == 'grandfathered' and row.get('grandfathered_tuition'):
+        eff_tuit = float(row['grandfathered_tuition'])
+    elif new_override == 'standard':
+        eff_tuit = float(row['tuition'])
+    else:
+        # No override — use effective tuition
+        _, _ = _effective_tuition(period_dict, row['fid'], conn2)
+        eff_tuit, _ = _effective_tuition(period_dict, row['fid'], conn2)
 
     # Get students and fees
     cur3 = conn2.cursor(dictionary=True)

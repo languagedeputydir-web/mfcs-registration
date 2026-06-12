@@ -202,26 +202,28 @@
           {% endif %}
           {% endif %}
 
-          {% if r.tuition_override == 'standard' %}
-          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
-            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
-            <input type="hidden" name="pid" value="{{ pid }}">
-            <input type="hidden" name="override" value="grandfathered">
-            <button type="submit" class="btn btn-sm btn-outline-info"
-                    title="Currently using full tuition — click to switch to grandfathered rate">
-              Full Tuition ↕
-            </button>
-          </form>
-          {% elif r.tuition_override == 'grandfathered' or ('grandfathered' in r.tuit_type) %}
+          {% if selected_period and selected_period.grandfathered_tuition %}
+          {% if r.tuition_override == 'grandfathered' or ('grandfathered' in (r.tuit_type or '')) %}
           <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
             <input type="hidden" name="pid" value="{{ pid }}">
             <input type="hidden" name="override" value="standard">
-            <button type="submit" class="btn btn-sm btn-outline-secondary"
-                    title="Switch this family to full tuition">
-              Switch to Full Tuition
+            <button type="submit" class="btn btn-sm btn-success"
+                    title="Currently using grandfathered tuition — click to switch to standard rate">
+              ✦ GF Tuition
             </button>
           </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="grandfathered">
+            <button type="submit" class="btn btn-sm btn-outline-success"
+                    title="Click to switch this family to grandfathered tuition rate">
+              Set GF Tuition
+            </button>
+          </form>
+          {% endif %}
           {% endif %}
         </td>
       </tr>
