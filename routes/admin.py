@@ -1254,15 +1254,36 @@ def finance():
             s['is_adult'] = adult
             students_by_fid[s['fid']].append(s)
 
-        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition, _is_returning_family, _is_late
+        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition, _is_returning_family, _is_late, _is_adult as _isa
         for r in regs:
             r['balance'] = float(r['total_due'] or 0) - float(r['total_paid'] or 0) - float(r['adjustment'] or 0)
             details = students_by_fid.get(r['family_id'], [])
 
-            # Get effective tuition for this family (grandfathered or standard)
-            _conn_tuit = get_db_connection()
-            eff_tuit, tuit_type = _effective_tuition(sel, r['family_id'], _conn_tuit)
-            _conn_tuit.close()
+            # Determine tuition type by back-calculating from stored total_due.
+            # Never use _effective_tuition() here — it checks today's date and
+            # returns 'standard (past deadline)' for everyone after the deadline.
+            tuit_type = 'standard'
+            eff_tuit  = float(sel.get('tuition') or 0)
+            gf = sel.get('grandfathered_tuition')
+            saved = float(r.get('total_due') or 0)
+
+            if r.get('tuition_override') == 'grandfathered':
+                tuit_type = 'grandfathered'
+                eff_tuit  = float(gf) if gf else eff_tuit
+            elif r.get('tuition_override') == 'standard':
+                tuit_type = 'standard'
+            elif gf and saved > 0.01:
+                # Back-calc: implied = (total - cult_fees - reg - pa) / minor_count
+                _cult_t  = sum(float(s.get('cf1',0)) + float(s.get('cf2',0)) for s in details)
+                _minors  = sum(1 for s in details if not s.get('is_adult'))
+                _reg     = float(sel.get('registration_fee') or 0)
+                _pa      = float(sel.get('pa_assignment_deposit') or 0)
+                if _minors > 0:
+                    _implied = (saved - _cult_t - _reg - _pa) / _minors
+                    if abs(_implied - float(gf)) <= 1.0:
+                        tuit_type = 'grandfathered'
+                        eff_tuit  = float(gf)
+
             r['tuit_type'] = tuit_type
 
             # Apply per-family tuition and MFCS discount to each student
