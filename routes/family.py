@@ -346,14 +346,14 @@ def login():
             pw_plain = row.get('password', '')
             stored = pw_hash if pw_hash and pw_hash != '?' else pw_plain
             if _check(password, stored):
-                # Block login if email not verified
+                # Block login if email not verified (only if column exists)
                 if row.get('email_verified') == 0:
                     flash('Please verify your email address before logging in. '
                           'Check your inbox (and spam folder) for the verification link.', 'warning')
                     return render_template('family/login.html', show_resend=True, email=email)
                 login_user(Family(row), remember=remember)
                 # Redirect to profile if address not yet verified
-                if not Family(row).address_verified:
+                if not getattr(Family(row), 'address_verified', True):
                     flash('Please update your home address — it is now required.', 'warning')
                     return redirect(url_for('family.profile'))
                 return redirect(url_for('family.dashboard'))
@@ -477,10 +477,8 @@ def register_account():
         city   = f.get('city', '').strip()
         state  = f.get('state', '').strip()
         zip_   = f.get('zip', '').strip()
-        # Address is optional — only validate if any part is filled in
-        address_entered = any([street, city, zip_])
-        if address_entered and not address_is_valid(street, city, state, zip_):
-            field_errors['street_address'] = 'Please enter a complete, valid address (street, city, state, 5-digit ZIP).'
+        if not address_is_valid(street, city, state, zip_):
+            field_errors['street_address'] = 'A valid street address, city, state, and 5-digit ZIP are required.'
         if field_errors:
             return render_template('family/register_account.html',
                                    field_errors=field_errors, form=f)
@@ -496,18 +494,15 @@ def register_account():
         verify_token = secrets.token_urlsafe(32)
 
         cur2 = conn.cursor()
-        addr_verified = 1 if address_is_valid(street, city, state, zip_) else 0
         cur2.execute("""INSERT INTO family
             (primary_email,password,password_hash,
              last_name_0,first_name_0,last_name_1,first_name_1,
              primary_phone,street_address,city,state,zip,
              address_verified,email_verified,email_verify_token)
-            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s)""",
+            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,%s)""",
             (email,_hash(pw),last,first,
              f.get('last_name_1', '?'),f.get('first_name_1', '?'),
-             phone,
-             street or '?', city or '?', state or '?', zip_ or '?',
-             addr_verified, verify_token))
+             phone, street, city, state, zip_, verify_token))
         conn.commit()
 
         # Send verification email
