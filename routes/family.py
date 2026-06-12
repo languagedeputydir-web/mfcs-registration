@@ -935,7 +935,9 @@ def register_classes(period_id):
     for s in students:
         s['_is_adult'] = _is_adult(s)
 
-    # Calculate effective tuition for this family (grandfathered or standard)
+    # Calculate effective tuition for this family (grandfathered or standard).
+    # If family already has a saved total_due, back-calculate the actual rate
+    # used at registration time — preserves grandfathered rate after deadline.
     conn2 = get_db_connection()
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn2)
 
@@ -944,26 +946,61 @@ def register_classes(period_id):
     try:
         cur2 = conn2.cursor(dictionary=True)
         cur2.execute(
-            "SELECT total_paid, late_fee_waived, first_payment_date FROM family_record WHERE fid=%s AND pid=%s",
+            "SELECT total_paid, late_fee_waived, first_payment_date, total_due FROM family_record WHERE fid=%s AND pid=%s",
             (current_user.id, period_id)
         )
         fpr_row = cur2.fetchone()
         total_paid_so_far  = float((fpr_row or {}).get('total_paid') or 0)
         late_fee_waived    = bool((fpr_row or {}).get('late_fee_waived', 0))
         first_payment_date = (fpr_row or {}).get('first_payment_date')
+        saved_total_due    = float((fpr_row or {}).get('total_due') or 0)
     except Exception:
         try:
             cur2 = conn2.cursor(dictionary=True)
             cur2.execute(
-                "SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s",
+                "SELECT total_paid, total_due FROM family_record WHERE fid=%s AND pid=%s",
                 (current_user.id, period_id)
             )
             fpr_row = cur2.fetchone()
             total_paid_so_far = float((fpr_row or {}).get('total_paid') or 0)
+            saved_total_due   = float((fpr_row or {}).get('total_due') or 0)
         except Exception:
             total_paid_so_far = 0.0
+            saved_total_due   = 0.0
         late_fee_waived    = False
         first_payment_date = None
+
+    # Back-calculate tuition rate from saved total_due if grandfathered period
+    if saved_total_due > 0.01 and period.get('grandfathered_tuition'):
+        _gf  = float(period['grandfathered_tuition'])
+        _std = float(period.get('tuition') or 0)
+        try:
+            _bc_cur = conn2.cursor(dictionary=True)
+            _bc_cur.execute("""SELECT s.birthday,
+                COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2
+                FROM student_record sr JOIN student s ON s.id=sr.sid
+                LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+                LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+                WHERE s.fid=%s AND sr.pid=%s
+                AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
+                     OR sr.ccgrid2 IS NOT NULL)""",
+                (current_user.id, period_id))
+            _old_rows   = _bc_cur.fetchall()
+            _old_cult_t = sum(float(r.get('cult_fee',0)) + float(r.get('cult_fee2',0))
+                              for r in _old_rows)
+            _old_minors = sum(1 for r in _old_rows if not _is_adult(r))
+            _reg = float(period.get('registration_fee') or 0)
+            _pa  = float(period.get('pa_assignment_deposit') or 0)
+            if _old_minors > 0:
+                _implied = (saved_total_due - _old_cult_t - _reg - _pa) / _old_minors
+                if abs(_implied - _gf) <= 1.0:
+                    eff_tuition  = _gf
+                    tuition_type = 'grandfathered'
+                elif abs(_implied - _std) <= 1.0:
+                    eff_tuition  = _std
+                    tuition_type = 'standard'
+        except Exception as e:
+            print(f'GF back-calc error in register_classes: {e}', flush=True)
 
     conn2.close()
 
@@ -1497,9 +1534,30 @@ def fee_summary(period_id):
     pa_fee   = float(period.get('pa_assignment_deposit') or 0) if period else 0
     # Will be recalculated after minor_count is known below
 
-    # Determine effective tuition for this family
+    # Determine effective tuition for this family.
+    # Back-calculate from stored total_due to preserve grandfathered rate after deadline.
     eff_tuition, tuition_type = _effective_tuition(period, current_user.id, conn) if period else (0, 'standard')
     conn.close()
+
+    # Back-calculate tuition rate from saved total_due if period has grandfathered tuition
+    if fpr and fpr.get('total_due') and float(fpr.get('total_due') or 0) > 0.01 \
+            and period and period.get('grandfathered_tuition'):
+        _saved = float(fpr['total_due'])
+        _gf  = float(period['grandfathered_tuition'])
+        _std = float(period.get('tuition') or 0)
+        _reg = float(period.get('registration_fee') or 0)
+        _pa  = float(period.get('pa_assignment_deposit') or 0)
+        _cult_t = sum(float(r.get('cult_fee') or 0) + float(r.get('cult_fee2') or 0)
+                      for r in raw_rows)
+        _old_minors = sum(1 for r in raw_rows if not _is_adult(r))
+        if _old_minors > 0:
+            _implied = (_saved - _cult_t - _reg - _pa) / _old_minors
+            if abs(_implied - _gf) <= 1.0:
+                eff_tuition  = _gf
+                tuition_type = 'grandfathered'
+            elif abs(_implied - _std) <= 1.0:
+                eff_tuition  = _std
+                tuition_type = 'standard'
 
     rows = []
     student_subtotal = 0.0
