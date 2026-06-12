@@ -208,21 +208,16 @@ def dashboard():
     fee_changed_count = 0
     if period:
         cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr WHERE sr.pid=%s
-            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
-            (period['id'],))
-        registered_students = cur.fetchone()['n']
-        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr JOIN student s ON s.id=sr.sid
-            WHERE sr.pid=%s AND s.is_adult=0
-            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
-            (period['id'],))
-        registered_minors = cur.fetchone()['n']
-        cur.execute("""SELECT COUNT(DISTINCT sr.sid) AS n
-            FROM student_record sr JOIN student s ON s.id=sr.sid
-            WHERE sr.pid=%s AND s.is_adult=1
-            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)""",
-            (period['id'],))
+            FROM student_record sr
+            WHERE sr.pid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL
+                 OR sr.ccgrid2 IS NOT NULL)
+            AND (
+                EXISTS (SELECT 1 FROM class_group_record cc
+                        WHERE cc.id=sr.ccgrid AND cc.adult_only=1)
+             OR EXISTS (SELECT 1 FROM class_group_record cc2
+                        WHERE cc2.id=sr.ccgrid2 AND cc2.adult_only=1)
+            )""", (period['id'],))
         registered_adults = cur.fetchone()['n']
         cur.execute("""SELECT COUNT(DISTINCT s.fid) AS n
             FROM student_record sr JOIN student s ON s.id=sr.sid

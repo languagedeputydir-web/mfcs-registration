@@ -477,8 +477,10 @@ def register_account():
         city   = f.get('city', '').strip()
         state  = f.get('state', '').strip()
         zip_   = f.get('zip', '').strip()
-        if not address_is_valid(street, city, state, zip_):
-            field_errors['street_address'] = 'A valid street address, city, state, and 5-digit ZIP are required.'
+        # Address is optional — only validate if any part is filled in
+        address_entered = any([street, city, zip_])
+        if address_entered and not address_is_valid(street, city, state, zip_):
+            field_errors['street_address'] = 'Please enter a complete, valid address (street, city, state, 5-digit ZIP).'
         if field_errors:
             return render_template('family/register_account.html',
                                    field_errors=field_errors, form=f)
@@ -494,15 +496,18 @@ def register_account():
         verify_token = secrets.token_urlsafe(32)
 
         cur2 = conn.cursor()
+        addr_verified = 1 if address_is_valid(street, city, state, zip_) else 0
         cur2.execute("""INSERT INTO family
             (primary_email,password,password_hash,
              last_name_0,first_name_0,last_name_1,first_name_1,
              primary_phone,street_address,city,state,zip,
              address_verified,email_verified,email_verify_token)
-            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,0,%s)""",
+            VALUES(%s,'',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s)""",
             (email,_hash(pw),last,first,
              f.get('last_name_1', '?'),f.get('first_name_1', '?'),
-             phone, street, city, state, zip_, verify_token))
+             phone,
+             street or '?', city or '?', state or '?', zip_ or '?',
+             addr_verified, verify_token))
         conn.commit()
 
         # Send verification email

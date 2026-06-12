@@ -22,6 +22,11 @@
       </select>
     </div>
     <div>
+      <label class="form-label small fw-500 mb-1">Student Name</label>
+      <input type="text" name="name" class="form-control form-control-sm" style="width:180px"
+             placeholder="Last or first name…" value="{{ name_filter or '' }}">
+    </div>
+    <div>
       <label class="form-label small fw-500 mb-1">Language Program</label>
       <select name="lang" class="form-select form-select-sm" style="width:180px">
         <option value="">All</option>
@@ -39,8 +44,24 @@
         {% endfor %}
       </select>
     </div>
+    <div>
+      <label class="form-label small fw-500 mb-1">Media Consent</label>
+      <select name="media" class="form-select form-select-sm" style="width:140px">
+        <option value="">All</option>
+        <option value="optin"  {% if media_filter=='optin'  %}selected{% endif %}>Opted In</option>
+        <option value="optout" {% if media_filter=='optout' %}selected{% endif %}>Opted Out</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label small fw-500 mb-1">Special Note</label>
+      <select name="note" class="form-select form-select-sm" style="width:160px">
+        <option value="">All</option>
+        <option value="has_note" {% if note_filter=='has_note' %}selected{% endif %}>Has note</option>
+        <option value="no_note"  {% if note_filter=='no_note'  %}selected{% endif %}>No note</option>
+      </select>
+    </div>
     <button type="submit" class="btn btn-sm btn-admin">Filter</button>
-    {% if lang_filter or cult_filter %}
+    {% if lang_filter or cult_filter or name_filter or media_filter or note_filter %}
     <a href="{{ url_for('admin.students', pid=pid) }}" class="btn btn-sm btn-link text-muted">Clear filters</a>
     {% endif %}
   </form>
@@ -52,7 +73,8 @@
       <tr>
         <th>Student</th>
         <th>Family</th>
-        <th>Birthday</th>
+        <th>Age</th>
+        <th>Media</th>
         <th>Language</th>
         <th>Culture 1</th>
         <th>Culture 2</th>
@@ -75,7 +97,22 @@
           </a>
           <div class="text-muted" style="font-size:.78rem">{{ s.family_email }}</div>
         </td>
-        <td class="text-muted">{{ s.birthday if s.birthday and s.birthday|string != '2999-01-01' else '—' }}</td>
+        <td class="text-muted">
+          {% if s.is_adult %}
+            <span class="badge bg-secondary">Adult</span>
+          {% elif s.birthday and s.birthday|string != '2999-01-01' %}
+            {{ ((today - s.birthday).days // 365) }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td>
+          {% if s.media_consent == 0 %}
+          <span class="badge bg-danger" title="Opted out of media sharing">✗ Opt-out</span>
+          {% else %}
+          <span class="badge bg-success" title="Consented to media sharing">✓</span>
+          {% endif %}
+        </td>
         <td>{{ s.lang_class or '—' }}</td>
         <td>{{ s.cult_class or '—' }}</td>
         <td>{{ s.cult_class2 or '—' }}</td>
@@ -92,7 +129,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="text-muted text-center py-4">No students found.</td></tr>
+      <tr><td colspan="9" class="text-muted text-center py-4">No students found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

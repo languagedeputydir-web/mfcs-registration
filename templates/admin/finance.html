@@ -5,8 +5,10 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h2 class="mb-0">Finance</h2>
   <div class="d-flex gap-2">
-    <a href="{{ url_for('admin.export_families', pid=pid, status=status_filter) }}"
-       class="btn btn-sm btn-outline-secondary">↓ CSV</a>
+    <a href="{{ url_for('admin.export_finance', pid=pid, status=status_filter) }}"
+       class="btn btn-sm btn-outline-success">↓ Finance Detail CSV</a>
+    <a href="{{ url_for('admin.export_finance_summary', pid=pid) }}"
+       class="btn btn-sm btn-outline-success ms-1">↓ Finance Summary CSV</a>
   </div>
 </div>
 
@@ -56,6 +58,23 @@
       <div class="small text-muted">Families</div>
     </div>
   </div>
+  <div class="col-4 col-md-2">
+    <div class="card p-2 text-center">
+      <div class="fw-600 fs-5" style="color:var(--mfcs-red)">
+        {% set ns = namespace(total=0, minors=0, adults=0) %}
+        {% for r in registrations %}
+          {% for s in r.student_details %}
+            {% set ns.total = ns.total + 1 %}
+            {% if s.is_adult %}{% set ns.adults = ns.adults + 1 %}{% else %}{% set ns.minors = ns.minors + 1 %}{% endif %}
+          {% endfor %}
+        {% endfor %}
+        {{ ns.total }}
+      </div>
+      <div class="small text-muted">Students
+        <br><span style="font-size:.7rem">{{ ns.minors }} minor · {{ ns.adults }} adult</span>
+      </div>
+    </div>
+  </div>
   <div class="col-4 col-md-3">
     <div class="card p-2 text-center">
       <div class="fw-600 fs-5">{{ total_due_sum|currency }}</div>
@@ -97,7 +116,6 @@
     <tbody>
       {% for r in registrations %}
       {% set needs_attention = r.reg_status == 'Pending' and r.description and 'Fee updated' in r.description %}
-      {% set detail_rows = r.student_details if r.student_details is defined else [] %}
       <tr class="{{ 'table-success' if r.reg_status == 'Complete Registration' else ('table-warning' if needs_attention) }}">
         <td class="fw-500">
           {{ r.last_name_0 }}, {{ r.first_name_0 }}
@@ -121,71 +139,184 @@
           </span>
         </td>
         <td>
-          <div class="d-flex gap-1">
-            {% if detail_rows %}
-            <button class="btn btn-sm btn-outline-secondary"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#detail-{{ r.fpr_id }}"
-                    title="Show fee breakdown">⊕</button>
-            {% endif %}
-            <button class="btn btn-sm btn-outline-secondary"
-                    data-bs-toggle="modal"
-                    data-bs-target="#payModal"
-                    data-fpr="{{ r.fpr_id }}"
-                    data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
-                    data-due="{{ r.total_due or 0 }}"
-                    data-paid="{{ r.total_paid or 0 }}"
-                    data-note="{{ r.description or '' }}"
-                    data-status="{{ r.reg_status }}"
-                    data-pid="{{ selected_period.id if selected_period else '' }}">
-              Update
+          <button class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#payModal"
+                  data-fpr="{{ r.fpr_id }}"
+                  data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
+                  data-due="{{ r.total_due or 0 }}"
+                  data-paid="{{ r.total_paid or 0 }}"
+                  data-note="{{ r.description or '' }}"
+                  data-status="{{ r.reg_status }}"
+                  data-paymentdate="{{ r.first_payment_date.strftime('%Y-%m-%d') if r.first_payment_date else '' }}"
+                  data-pid="{{ selected_period.id if selected_period else '' }}">
+            Update
+          </button>
+          <button class="btn btn-sm btn-outline-info ms-1"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#detail-{{ r.fpr_id }}"
+                  aria-expanded="false">
+            Detail
+          </button>
+          {% if r.late_fee_eligible or r.late_fee_waived %}
+          {% if r.late_fee_waived %}          <form method="post" action="{{ url_for('admin.unwaive_late_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-warning"
+                    title="Late fee waived — click to reinstate">
+              Late Fee Waived
             </button>
-          </div>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin.waive_late_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning"
+                    title="Click to waive late fee for this family">
+              Waive Late Fee
+            </button>
+          </form>
+          {% endif %}
+          {% endif %}
+
+          {% if r.is_new_family and r.minor_count > 0 %}
+          {% if r.reg_fee_waived %}
+          <form method="post" action="{{ url_for('admin.unwaive_reg_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-warning"
+                    title="Registration fee waived — click to reinstate">
+              Reg Fee Waived
+            </button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin.waive_reg_fee') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning"
+                    title="Waive registration fee for this new family">
+              Waive Reg Fee
+            </button>
+          </form>
+          {% endif %}
+          {% endif %}
+
+          {% if r.tuition_override == 'standard' %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="grandfathered">
+            <button type="submit" class="btn btn-sm btn-outline-info"
+                    title="Currently using full tuition — click to switch to grandfathered rate">
+              Full Tuition ↕
+            </button>
+          </form>
+          {% elif r.tuition_override == 'grandfathered' or ('grandfathered' in r.tuit_type) %}
+          <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
+            <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="override" value="standard">
+            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                    title="Switch this family to full tuition">
+              Switch to Full Tuition
+            </button>
+          </form>
+          {% endif %}
         </td>
       </tr>
-      {% if detail_rows %}
       <tr class="collapse" id="detail-{{ r.fpr_id }}">
         <td colspan="8" class="p-0">
-          <table class="table table-sm mb-0" style="background:#f8f9fa">
-            <thead>
-              <tr class="text-muted small">
-                <th style="padding-left:2rem">Student</th>
-                <th>Language</th>
-                <th>Culture 1</th>
-                <th>Culture 2</th>
-                <th>Breakdown</th>
-                <th class="text-end">Fee</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for d in detail_rows %}
-              <tr class="small">
-                <td style="padding-left:2rem">{{ d.last_name }}, {{ d.first_name }}</td>
-                <td>{% if d.is_adult %}N/A{% else %}{{ d.lang_class or '—' }}{% endif %}</td>
-                <td>{{ d.cult_class or '—' }}</td>
-                <td>{{ d.cult_class2 or '—' }}</td>
-                <td class="text-muted">
-                  {% if d.is_adult %}
-                    Culture {{ d.cf1|currency }}{% if d.cf2 %} + {{ d.cf2|currency }}{% endif %}
-                  {% else %}
-                    Tuition + {% if d.cult_class %}Culture{% endif %}{% if d.cult_class2 %} + Culture 2{% endif %}
-                  {% endif %}
-                </td>
-                <td class="text-end fw-500">{{ d.student_fee|currency }}</td>
-              </tr>
-              {% endfor %}
-              <tr class="small table-light">
-                <td colspan="5" class="text-end text-muted" style="padding-left:2rem">
-                  Student subtotal + Reg {{ (selected_period.registration_fee or 0)|currency }}
-                  + PA {{ (selected_period.pa_assignment_deposit or 0)|currency }}
-                </td>
-                <td class="text-end fw-600">{{ (r.total_due or 0)|currency }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="p-3 bg-light border-bottom">
+            {% if r.student_details %}
+            <table class="table table-sm table-bordered mb-2 small">
+              <thead class="table-secondary">
+                <tr>
+                  <th>Student</th>
+                  <th>Type</th>
+                  <th>Language</th>
+                  <th>Culture 1</th>
+                  <th>Culture 1 Fee</th>
+                  <th>Culture 2</th>
+                  <th>Culture 2 Fee</th>
+                  <th>Tuition</th>
+                  <th class="text-end">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in r.student_details %}
+                <tr>
+                  <td>{{ s.last_name }}, {{ s.first_name }}</td>
+                  <td>{{ 'Adult' if s.is_adult else 'Minor' }}{% if s.is_adult %} ({{ 'MFCS' if s.mfcs_affiliation == 'Y' else 'General' }}){% endif %}</td>
+                  <td>{{ s.lang_class or '—' }}</td>
+                  <td>{{ s.cult_class or '—' }}</td>
+                  <td>{{ '$%.2f'|format(s.cf1) if s.cf1 else '—' }}</td>
+                  <td>{{ s.cult_class2 or '—' }}</td>
+                  <td>{{ '$%.2f'|format(s.cf2) if s.cf2 else '—' }}</td>
+                  <td>
+                    {% if s.is_adult %}N/A
+                    {% else %}
+                      {{ '%.2f'|format(s.tuition)|currency }}
+                      {% if 'grandfathered' in r.tuit_type %}<span class="text-success small">✦</span>{% endif %}
+                      {% if r.tuit_type == 'standard (finance override)' %}<span class="text-danger small">⚠</span>{% endif %}
+                    {% endif %}
+                  </td>
+                  <td class="text-end fw-500">{{ '%.2f'|format(s.student_fee)|currency }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot class="table-light">
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">Student subtotal</td>
+                  <td class="text-end fw-500">{{ '%.2f'|format(r.student_subtotal)|currency }}</td>
+                </tr>
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">Registration fee
+                    {% if r.reg_fee_waived %}<span class="badge bg-warning text-dark ms-1">Waived</span>{% endif %}
+                  </td>
+                  <td class="text-end">{{ '%.2f'|format(r.reg_fee)|currency }}</td>
+                </tr>
+                <tr>
+                  <td colspan="8" class="text-end text-muted small">PA Assignment Duty deposit</td>
+                  <td class="text-end">{{ '%.2f'|format(r.pa_fee)|currency }}</td>
+                </tr>
+                {% if r.late_fee %}
+                <tr class="text-danger">
+                  <td colspan="8" class="text-end small">Late payment fee
+                    ({{ r.minor_count }} minor{{ 's' if r.minor_count > 1 }} × {{ '%.2f'|format(r.per_minor_late)|currency }})</td>
+                  <td class="text-end">{{ '%.2f'|format(r.late_fee)|currency }}</td>
+                </tr>
+                {% endif %}
+                {% if r.multi_disc > 0 %}
+                <tr class="text-success">
+                  <td colspan="8" class="text-end small">Multi-child discount ({{ r.extra_kids }} × {{ '%.2f'|format(r.discount_per)|currency }})</td>
+                  <td class="text-end">-{{ '%.2f'|format(r.multi_disc)|currency }}</td>
+                </tr>
+                {% endif %}
+                <tr class="fw-bold">
+                  <td colspan="8" class="text-end">Total Due (calculated)</td>
+                  <td class="text-end">{{ '%.2f'|format(r.calc_total)|currency }}</td>
+                </tr>
+                <tr class="text-muted">
+                  <td colspan="8" class="text-end small">Total Due (on record)</td>
+                  <td class="text-end small">{{ '%.2f'|format(r.total_due or 0)|currency }}</td>
+                </tr>
+                <tr class="text-success">
+                  <td colspan="8" class="text-end small">Payment received</td>
+                  <td class="text-end small">{{ '%.2f'|format(r.total_paid or 0)|currency }}</td>
+                </tr>
+                {% set balance = (r.total_due or 0)|float - (r.total_paid or 0)|float - (r.adjustment or 0)|float %}
+                <tr class="{{ 'text-danger fw-bold' if balance > 0 else 'text-success' }}">
+                  <td colspan="8" class="text-end small">Remaining Balance</td>
+                  <td class="text-end small">{{ '%.2f'|format(balance)|currency }}</td>
+                </tr>
+              </tfoot>
+            </table>
+            {% else %}
+            <div class="text-muted small">No class selections found for this family.</div>
+            {% endif %}
+          </div>
         </td>
-      </tr>
-      {% endif %}
       {% else %}
       <tr><td colspan="8" class="text-muted text-center py-4">No registrations found.</td></tr>
       {% endfor %}
@@ -226,6 +357,15 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label small fw-500">First Payment Date
+              <span class="text-muted fw-400 small">— used to determine if late fee applies</span>
+            </label>
+            <input type="date" name="first_payment_date" id="modal_payment_date"
+                   class="form-control form-control-sm" style="max-width:200px">
+            <div class="form-text">Defaults to today. Adjust if cheque was postmarked on a different date.</div>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label small fw-500">Payment Note</label>
             <textarea name="description" id="modal_note" class="form-control form-control-sm"
                       rows="5" style="min-height:120px"
@@ -260,6 +400,13 @@ payModal.addEventListener('show.bs.modal', e => {
   document.getElementById('modal_paid').value    = parseFloat(btn.dataset.paid).toFixed(2);
   document.getElementById('modal_note').value    = btn.dataset.note;
   document.getElementById('modal_status').value  = btn.dataset.status || 'Pending';
+  // Set first payment date — use existing if set, otherwise today (local date)
+  const existingDate = btn.dataset.paymentdate;
+  const now = new Date();
+  const today = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0');
+  document.getElementById('modal_payment_date').value = existingDate || today;
 });
 </script>
 {% endblock %}
