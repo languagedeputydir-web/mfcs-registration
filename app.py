@@ -78,6 +78,46 @@ def create_app():
     def index():
         return redirect(url_for('family.login'))
 
+    # ── Error notification ─────────────────────────────────────────────────────
+    # Email the admin whenever an unhandled exception (500 error) occurs.
+    # Uses the same Brevo setup already configured for registration emails.
+    import traceback
+    from datetime import datetime
+
+    @app.errorhandler(Exception)
+    def handle_unhandled_exception(e):
+        from flask import request
+
+        admin_email = os.environ.get('ERROR_ALERT_EMAIL', os.environ.get('MAIL_SENDER', ''))
+        try:
+            if admin_email:
+                from routes.family import _send_email
+                tb = traceback.format_exc()
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                subject = f'MFCS Registration — Error on {request.path}'
+                text_body = (
+                    f"An error occurred on the MFCS registration system.\n\n"
+                    f"Time: {now}\n"
+                    f"Path: {request.method} {request.path}\n"
+                    f"Error: {type(e).__name__}: {e}\n\n"
+                    f"Traceback:\n{tb}"
+                )
+                html_body = (
+                    f"<p><strong>An error occurred on the MFCS registration system.</strong></p>"
+                    f"<p><strong>Time:</strong> {now}<br>"
+                    f"<strong>Path:</strong> {request.method} {request.path}<br>"
+                    f"<strong>Error:</strong> {type(e).__name__}: {e}</p>"
+                    f"<pre style='background:#f5f5f5;padding:10px;font-size:12px;"
+                    f"overflow-x:auto;white-space:pre-wrap'>{tb}</pre>"
+                )
+                _send_email(admin_email, subject, text_body, html_body)
+        except Exception as notify_err:
+            # Never let the notification itself crash the app further
+            print(f'ERROR NOTIFY FAILED: {notify_err}', flush=True)
+
+        # Re-raise so Flask's normal error page / logging still happens
+        raise e
+
     return app
 
 
