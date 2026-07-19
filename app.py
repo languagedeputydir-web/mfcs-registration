@@ -87,6 +87,12 @@ def create_app():
     @app.errorhandler(Exception)
     def handle_unhandled_exception(e):
         from flask import request
+        from werkzeug.exceptions import HTTPException
+
+        # Only notify on real server errors — ignore 404, 403 etc.
+        # Bots constantly probe for .git/config, wp-admin, etc. causing 404s.
+        if isinstance(e, HTTPException):
+            raise e
 
         admin_email = os.environ.get('ERROR_ALERT_EMAIL', os.environ.get('MAIL_SENDER', ''))
         try:
