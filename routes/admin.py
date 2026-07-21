@@ -2554,3 +2554,95 @@ def export_staff():
         w.writeheader(); w.writerows(rows)
     return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition':'attachment; filename=mfcs_staff.csv'})
+
+
+@admin_bp.route('/export/emails')
+@roles_required('admin', 'finance', 'language', 'culture')
+def export_email_list():
+    """Export all email addresses for a school period — teachers, TAs,
+    families (primary + secondary), and students — deduplicated, as CSV."""
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    period = _cur_period(cur)
+    pid = request.args.get('pid', period['id'] if period else 0)
+
+    emails = []  # list of dicts: {email, name, type}
+
+    # ── Teachers & TAs ────────────────────────────────────────────────────────
+    cur.execute("""SELECT tr.first_name, tr.last_name, tr.email, tr.type
+        FROM teacher_record tr
+        WHERE tr.pid=%s AND tr.email IS NOT NULL
+        AND tr.email != '' AND tr.email != '?'
+        ORDER BY tr.type, tr.last_name, tr.first_name""", (pid,))
+    for r in cur.fetchall():
+        if r['email'] and '@' in r['email']:
+            emails.append({
+                'email': r['email'].strip().lower(),
+                'name':  f"{r['last_name']}, {r['first_name']}",
+                'type':  r['type'],
+            })
+
+    # ── Families (primary + secondary email) ─────────────────────────────────
+    cur.execute("""SELECT DISTINCT f.first_name_0, f.last_name_0,
+        f.primary_email, f.secondary_email
+        FROM family_record fr
+        JOIN family f ON f.id = fr.fid
+        WHERE fr.pid=%s
+        ORDER BY f.last_name_0, f.first_name_0""", (pid,))
+    for r in cur.fetchall():
+        name = f"{r['last_name_0']}, {r['first_name_0']}"
+        if r['primary_email'] and '@' in str(r['primary_email']):
+            emails.append({
+                'email': r['primary_email'].strip().lower(),
+                'name':  name,
+                'type':  'Family (Primary)',
+            })
+        sec = r.get('secondary_email', '')
+        if sec and '@' in str(sec) and sec not in ('?', ''):
+            emails.append({
+                'email': sec.strip().lower(),
+                'name':  name,
+                'type':  'Family (Secondary)',
+            })
+
+    # ── Students ──────────────────────────────────────────────────────────────
+    cur.execute("""SELECT DISTINCT s.first_name, s.last_name, s.email
+        FROM student_record sr
+        JOIN student s ON s.id = sr.sid
+        WHERE sr.pid=%s
+        AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+        AND s.email IS NOT NULL AND s.email != '' AND s.email != '?'
+        ORDER BY s.last_name, s.first_name""", (pid,))
+    for r in cur.fetchall():
+        if r['email'] and '@' in str(r['email']):
+            emails.append({
+                'email': r['email'].strip().lower(),
+                'name':  f"{r['last_name']}, {r['first_name']}",
+                'type':  'Student',
+            })
+
+    conn.close()
+
+    # Deduplicate by email address, keeping first occurrence
+    seen = set()
+    unique = []
+    for e in emails:
+        if e['email'] not in seen:
+            seen.add(e['email'])
+            unique.append(e)
+
+    output = io.StringIO()
+    output.write('\ufeff')  # UTF-8 BOM for Excel
+    w = csv.DictWriter(output, fieldnames=['email', 'name', 'type'],
+                       quoting=csv.QUOTE_ALL)
+    w.writeheader()
+    w.writerows(unique)
+
+    # Get period name for filename
+    conn2 = get_db_connection(); cur2 = conn2.cursor(dictionary=True)
+    cur2.execute("SELECT name FROM period WHERE id=%s", (pid,))
+    p = cur2.fetchone(); conn2.close()
+    period_name = (p['name'] if p else 'all').replace(' ', '_').replace('/', '-')
+    filename = f"mfcs_emails_{period_name}.csv"
+
+    return Response(output.getvalue(), mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={filename}'})

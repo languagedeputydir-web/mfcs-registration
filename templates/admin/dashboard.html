@@ -267,5 +267,27 @@
     </div>
   </div>
 
+  <!-- Exports (all roles) -->
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100 p-4" style="border-left:4px solid #7f8c8d">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <span style="font-size:1.8rem">📧</span>
+        <h5 class="mb-0">Email List</h5>
+      </div>
+      <p class="small text-muted mb-3">
+        Export all email addresses for the current school year — teachers,
+        TAs, families and students — deduplicated, as a CSV file.
+      </p>
+      <div class="mt-auto d-flex gap-2">
+        {% if period %}
+        <a href="{{ url_for('admin.export_email_list', pid=period.id) }}"
+           class="btn btn-outline-secondary btn-sm">↓ Download</a>
+        {% else %}
+        <span class="btn btn-outline-secondary btn-sm disabled">No active year</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
 </div><!-- end row -->
 {% endblock %}
