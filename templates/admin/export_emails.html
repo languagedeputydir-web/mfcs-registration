@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Export Email List — MFCS Admin{% endblock %}
+{% block navbar %}{% include 'admin/_navbar.html' %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Export Email List</h2>
+  <a href="{{ url_for('admin.dashboard') }}" class="btn btn-sm btn-outline-secondary">← Dashboard</a>
+</div>
+
+<div class="card p-4" style="max-width:480px">
+  <p class="text-muted mb-4">
+    Select a school year to download a CSV of all email addresses —
+    teachers, TAs, families (primary &amp; secondary), and students —
+    deduplicated.
+  </p>
+  <form method="get" action="{{ url_for('admin.export_email_list') }}">
+    <div class="mb-3">
+      <label class="form-label fw-500">School Year</label>
+      <select name="pid" class="form-select" required>
+        <option value="">— Select a school year —</option>
+        {% for p in periods_list %}
+        <option value="{{ p.id }}"
+          {% if period and p.id == period.id %}selected{% endif %}>
+          {{ p.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-admin">↓ Download CSV</button>
+  </form>
+</div>
+{% endblock %}

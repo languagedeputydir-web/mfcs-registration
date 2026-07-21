@@ -2556,14 +2556,23 @@ def export_staff():
         headers={'Content-Disposition':'attachment; filename=mfcs_staff.csv'})
 
 
-@admin_bp.route('/export/emails')
+@admin_bp.route('/export/emails', methods=['GET'])
 @roles_required('admin', 'finance', 'language', 'culture')
 def export_email_list():
-    """Export all email addresses for a school period — teachers, TAs,
-    families (primary + secondary), and students — deduplicated, as CSV."""
+    """If no pid supplied, show a period selector page.
+    If pid supplied, generate and download the CSV."""
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
-    period = _cur_period(cur)
-    pid = request.args.get('pid', period['id'] if period else 0)
+    period  = _cur_period(cur)
+    plist   = _periods_list(cur)
+    pid_raw = request.args.get('pid', '')
+
+    # No period selected — show selector page
+    if not pid_raw:
+        conn.close()
+        return render_template('admin/export_emails.html',
+                               periods_list=plist, period=period)
+
+    pid = int(pid_raw)
 
     emails = []  # list of dicts: {email, name, type}
 
