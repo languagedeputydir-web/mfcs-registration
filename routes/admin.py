@@ -1777,6 +1777,11 @@ def update_payment():
     # Send confirmation email if status changed to Complete Registration
     if reg_status == 'Complete Registration' and old_status != 'Complete Registration':
         try:
+            # family_id may not be in form — look it up from family_record if missing
+            if not family_id:
+                cur.execute("SELECT fid FROM family_record WHERE id=%s", (int(fpr_id),))
+                _fid_row = cur.fetchone()
+                family_id = _fid_row['fid'] if _fid_row else None
             cur.execute("SELECT primary_email, first_name_0, last_name_0 FROM family WHERE id=%s", (int(family_id),))
             family = cur.fetchone()
             if family:

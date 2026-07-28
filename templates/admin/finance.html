@@ -143,6 +143,7 @@
                   data-bs-toggle="modal"
                   data-bs-target="#payModal"
                   data-fpr="{{ r.fpr_id }}"
+                  data-family-id="{{ r.family_id }}"
                   data-name="{{ r.last_name_0 }}, {{ r.first_name_0 }}"
                   data-due="{{ r.total_due or 0 }}"
                   data-paid="{{ r.total_paid or 0 }}"
@@ -338,6 +339,7 @@
         <div class="modal-body">
           <input type="hidden" name="fpr_id" id="modal_fpr_id">
           <input type="hidden" name="pid" id="modal_pid">
+          <input type="hidden" name="family_id" id="modal_family_id">
           <p class="fw-500 mb-3" id="modal_family_name"></p>
 
           <div class="row g-2 mb-3">
@@ -395,8 +397,9 @@
 const payModal = document.getElementById('payModal');
 payModal.addEventListener('show.bs.modal', e => {
   const btn = e.relatedTarget;
-  document.getElementById('modal_fpr_id').value  = btn.dataset.fpr;
-  document.getElementById('modal_pid').value     = btn.dataset.pid;
+  document.getElementById('modal_fpr_id').value   = btn.dataset.fpr;
+  document.getElementById('modal_pid').value      = btn.dataset.pid;
+  document.getElementById('modal_family_id').value = btn.dataset.familyId || '';
   document.getElementById('modal_family_name').textContent = btn.dataset.name;
   document.getElementById('modal_due').value     = parseFloat(btn.dataset.due).toFixed(2);
   document.getElementById('modal_paid').value    = parseFloat(btn.dataset.paid).toFixed(2);
