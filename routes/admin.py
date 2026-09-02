@@ -117,22 +117,28 @@ def _recalc_family_record(cur, fid, pid):
     minor_count = sum(1 for r in rows if not _is_adult(r))
 
     try:
-        cur.execute("SELECT total_paid, late_fee_waived, first_payment_date FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        cur.execute("SELECT total_paid, late_fee_waived, first_payment_date, reg_status FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
         fpr_row = cur.fetchone() or {}
         total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
         late_fee_waived    = bool(fpr_row.get('late_fee_waived', 0))
         first_payment_date = fpr_row.get('first_payment_date')
+        existing_status    = fpr_row.get('reg_status') or 'Pending'
     except Exception:
-        cur.execute("SELECT total_paid FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
+        cur.execute("SELECT total_paid, reg_status FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
         fpr_row = cur.fetchone() or {}
         total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
         late_fee_waived    = False
         first_payment_date = None
+        existing_status    = fpr_row.get('reg_status') or 'Pending'
 
-    charge_late, per_minor_late = _should_charge_late_fee(
-        period, fid, pid, total_paid_so_far, late_fee_waived, None,
-        first_payment_date=first_payment_date
-    )
+    # Never add late fee to a family that has already completed registration
+    if existing_status == 'Complete Registration':
+        charge_late, per_minor_late = False, 0.0
+    else:
+        charge_late, per_minor_late = _should_charge_late_fee(
+            period, fid, pid, total_paid_so_far, late_fee_waived, None,
+            first_payment_date=first_payment_date
+        )
     late_fee_total = minor_count * per_minor_late if charge_late else 0.0
     new_total = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
