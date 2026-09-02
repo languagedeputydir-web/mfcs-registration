@@ -1319,16 +1319,21 @@ def finance():
             fam_pa_fee  = pa_fee if minor_count > 0 else 0.0
             fam_late_fee_waived = bool(r.get('late_fee_waived', 0))
             total_paid_fam = float(r.get('total_paid') or 0)
-            # Check late fee per family with a fresh connection
-            from routes.family import _should_charge_late_fee as _sclf
-            _conn_tmp = get_db_connection()
-            charge_late, per_minor = _sclf(
-                sel, r['family_id'], int(pid),
-                total_paid_fam, fam_late_fee_waived, _conn_tmp,
-                first_payment_date=r.get('first_payment_date')
-            )
-            _conn_tmp.close()
-            fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
+            # Never add late fee to families already marked Complete Registration
+            _existing_status = r.get('reg_status') or 'Pending'
+            if _existing_status == 'Complete Registration':
+                charge_late, per_minor = False, 0.0
+                fam_late_fee = 0.0
+            else:
+                from routes.family import _should_charge_late_fee as _sclf
+                _conn_tmp = get_db_connection()
+                charge_late, per_minor = _sclf(
+                    sel, r['family_id'], int(pid),
+                    total_paid_fam, fam_late_fee_waived, _conn_tmp,
+                    first_payment_date=r.get('first_payment_date')
+                )
+                _conn_tmp.close()
+                fam_late_fee = minor_count * per_minor if (charge_late and minor_count > 0) else 0.0
 
             r['student_details']  = details
             r['student_subtotal'] = sum(s['student_fee'] for s in details)
