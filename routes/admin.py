@@ -2167,6 +2167,88 @@ def students():
 
 # ══ CSV EXPORTS ════════════════════════════════════════════════════════════════
 
+@admin_bp.route('/students/change-language', methods=['POST'])
+@roles_required('admin', 'language')
+def change_language_class():
+    """Admin/language coordinator changes a student's language class assignment."""
+    sid       = request.form.get('sid', '').strip()
+    pid       = request.form.get('pid', '').strip()
+    new_lcgrid = request.form.get('new_lcgrid', '').strip()
+    reason    = request.form.get('reason', '').strip()
+
+    if not sid or not pid or not new_lcgrid:
+        flash('Missing required fields.', 'danger')
+        return redirect(url_for('admin.students', pid=pid))
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get current student and class info
+    cur.execute("""SELECT s.first_name, s.last_name, s.fid,
+        lc_old.name AS old_class, lc_new.name AS new_class,
+        f.primary_email, f.first_name_0, f.last_name_0
+        FROM student s
+        JOIN student_record sr ON sr.sid=s.id AND sr.pid=%s
+        LEFT JOIN class_group_record lc_old ON lc_old.id=sr.lcgrid
+        JOIN class_group_record lc_new ON lc_new.id=%s
+        JOIN family f ON f.id=s.fid
+        WHERE s.id=%s""", (pid, new_lcgrid, sid))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash('Student or class not found.', 'danger')
+        return redirect(url_for('admin.students', pid=pid))
+
+    old_class = row['old_class'] or '(none)'
+    new_class = row['new_class']
+    student_name  = f"{row['first_name']} {row['last_name']}"
+    family_email  = row['primary_email']
+    family_first  = row['first_name_0']
+    family_last   = row['last_name_0']
+
+    # Update the language class in student_record
+    cur.execute("""UPDATE student_record SET lcgrid=%s, last_update=NOW()
+        WHERE sid=%s AND pid=%s""", (new_lcgrid, sid, pid))
+    conn.commit()
+    conn.close()
+
+    # Send notification email to family
+    try:
+        subject = f'MFCS — Class Assignment Updated for {student_name}'
+        text_body = (
+            f"Dear {family_first} {family_last},\n\n"
+            f"The language class assignment for {student_name} has been updated "
+            f"by the school administration.\n\n"
+            f"Previous class: {old_class}\n"
+            f"New class: {new_class}\n"
+            + (f"\nReason: {reason}\n" if reason else "")
+            + f"\nIf you have any questions, please contact us at "
+            f"languagedeputydir@mfcsnj.org.\n\n"
+            f"Monmouth Fidelity Chinese School"
+        )
+        html_body = (
+            f"<p>Dear {family_first} {family_last},</p>"
+            f"<p>The language class assignment for <strong>{student_name}</strong> "
+            f"has been updated by the school administration.</p>"
+            f"<table border='1' cellpadding='8' cellspacing='0' "
+            f"style='border-collapse:collapse;margin-bottom:12px'>"
+            f"<tr><td><strong>Previous class</strong></td><td>{old_class}</td></tr>"
+            f"<tr><td><strong>New class</strong></td><td>{new_class}</td></tr>"
+            + (f"<tr><td><strong>Reason</strong></td><td>{reason}</td></tr>" if reason else "")
+            + f"</table>"
+            f"<p>If you have any questions, please contact us at "
+            f"<a href='mailto:languagedeputydir@mfcsnj.org'>languagedeputydir@mfcsnj.org</a>.</p>"
+            f"<p>Monmouth Fidelity Chinese School</p>"
+        )
+        _send_email(family_email, subject, text_body, html_body)
+        flash(f'Class updated: {student_name} moved from {old_class} to {new_class}. '
+              f'Family notified at {family_email}.', 'success')
+    except Exception as e:
+        flash(f'Class updated but email failed: {e}', 'warning')
+
+    return redirect(url_for('admin.students', pid=pid))
+
+
 @admin_bp.route('/export/families')
 @roles_required('admin','finance')
 def export_families():
