@@ -1203,24 +1203,38 @@ def submit_registration(period_id):
                 if '1062' not in str(e) and 'Duplicate' not in str(e):
                     raise
 
-    # Determine late fee: per-minor, returning families only, unpaid past deadline
-    charge_late, per_minor_late = _should_charge_late_fee(
-        period, current_user.id, period_id, 0, False, conn
+    # Fetch existing family_record before calculating late fee
+    cur.execute(
+        "SELECT id, total_due AS old_total, reg_status, total_paid, "
+        "late_fee_waived, first_payment_date FROM family_record "
+        "WHERE fid = %s AND pid = %s",
+        (current_user.id, period_id)
     )
+    fpr = cur.fetchone()
+
+    # Determine late fee using actual payment data from family_record
+    _total_paid_so_far  = float((fpr or {}).get('total_paid') or 0)
+    _late_fee_waived    = bool((fpr or {}).get('late_fee_waived', 0))
+    _first_payment_date = (fpr or {}).get('first_payment_date')
+    _old_status         = (fpr or {}).get('reg_status') or 'Pending'
+
+    # Never add a late fee to a family that has already completed registration
+    if _old_status == 'Complete Registration':
+        charge_late, per_minor_late = False, 0.0
+    else:
+        charge_late, per_minor_late = _should_charge_late_fee(
+            period, current_user.id, period_id,
+            _total_paid_so_far, _late_fee_waived, conn,
+            first_payment_date=_first_payment_date
+        )
     late_fee_total = minor_count * per_minor_late if charge_late else 0.0
 
     # Total = student fees + registration fee + PA deposit + late fee - multi-kid discount
     total_due = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
-    cur.execute(
-        "SELECT id, total_due AS old_total, reg_status FROM family_record "
-        "WHERE fid = %s AND pid = %s",
-        (current_user.id, period_id)
-    )
-    fpr = cur.fetchone()
     if fpr:
         old_total    = float(fpr.get('old_total') or fpr.get('total_due') or 0)
-        old_status   = fpr['reg_status'] or 'Pending'
+        old_status   = _old_status
         fee_changed  = abs(total_due - old_total) > 0.01
         # If fee changed AND was already Complete, revert to Pending and flag it
         if fee_changed and old_status == 'Complete Registration':
