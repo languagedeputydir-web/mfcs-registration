@@ -1222,11 +1222,35 @@ def submit_registration(period_id):
     if _old_status == 'Complete Registration':
         charge_late, per_minor_late = False, 0.0
     else:
-        charge_late, per_minor_late = _should_charge_late_fee(
-            period, current_user.id, period_id,
-            _total_paid_so_far, _late_fee_waived, conn,
-            first_payment_date=_first_payment_date
-        )
+        # Only charge late fee if a MINOR's registration changed.
+        # If only adult classes were added/changed, no late fee applies.
+        cur.execute("""SELECT sr.sid, sr.lcgrid, sr.ccgrid, sr.ccgrid2
+            FROM student_record sr JOIN student s ON s.id=sr.sid
+            WHERE sr.pid=%s AND s.fid=%s AND s.is_adult=0""",
+            (period_id, current_user.id))
+        old_minor_rows = {r['sid']: (r['lcgrid'], r['ccgrid'], r['ccgrid2'])
+                          for r in cur.fetchall()}
+
+        # Check if any minor's submitted selections differ from stored ones
+        minor_changed = False
+        for s in [s for s in students if not _is_adult(s)]:
+            sid = s['id']
+            new_lid  = int(request.form.get(f'lang_{sid}') or 0) or None
+            new_cid  = int(request.form.get(f'cult_{sid}') or 0) or None
+            new_cid2 = int(request.form.get(f'cult2_{sid}') or 0) or None
+            old = old_minor_rows.get(sid, (None, None, None))
+            if (new_lid, new_cid, new_cid2) != old:
+                minor_changed = True
+                break
+
+        if minor_changed or not old_minor_rows:
+            charge_late, per_minor_late = _should_charge_late_fee(
+                period, current_user.id, period_id,
+                _total_paid_so_far, _late_fee_waived, conn,
+                first_payment_date=_first_payment_date
+            )
+        else:
+            charge_late, per_minor_late = False, 0.0
     late_fee_total = minor_count * per_minor_late if charge_late else 0.0
 
     # Total = student fees + registration fee + PA deposit + late fee - multi-kid discount
