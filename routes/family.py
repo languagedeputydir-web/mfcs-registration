@@ -1233,7 +1233,7 @@ def submit_registration(period_id):
 
         # Check if any minor's submitted selections differ from stored ones
         minor_changed = False
-        for s in [s for s in students if not _is_adult(s)]:
+        for s in [s for s in students.values() if not _is_adult(s)]:
             sid = s['id']
             new_lid  = int(request.form.get(f'lang_{sid}') or 0) or None
             new_cid  = int(request.form.get(f'cult_{sid}') or 0) or None
