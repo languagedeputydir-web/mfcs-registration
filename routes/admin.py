@@ -2249,6 +2249,32 @@ def change_language_class():
     return redirect(url_for('admin.students', pid=pid))
 
 
+@admin_bp.route('/students/<int:student_id>/media-consent', methods=['POST'])
+@roles_required('admin', 'language', 'culture')
+def toggle_media_consent(student_id):
+    """Admin sets media consent opt-in or opt-out for a student."""
+    pid         = request.form.get('pid', '')
+    new_consent = request.form.get('new_consent', '1')
+    new_consent = 1 if new_consent == '1' else 0
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    cur.execute("UPDATE student SET media_consent=%s WHERE id=%s",
+                (new_consent, student_id))
+    conn.commit()
+
+    # Get student name for flash message
+    cur.execute("""SELECT s.first_name, s.last_name
+        FROM student s WHERE s.id=%s""", (student_id,))
+    row = cur.fetchone()
+    conn.close()
+
+    name   = f"{row['first_name']} {row['last_name']}" if row else f"Student {student_id}"
+    status = 'Opted out' if new_consent == 0 else 'Opted in'
+    flash(f'{name}: media consent set to {status}.', 'success')
+
+    return redirect(url_for('admin.students', pid=pid))
+
+
 @admin_bp.route('/export/families')
 @roles_required('admin','finance')
 def export_families():

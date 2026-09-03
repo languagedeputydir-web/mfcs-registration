@@ -136,6 +136,17 @@
             Change Class
           </button>
           {% endif %}
+          <form method="post"
+                action="{{ url_for('admin.toggle_media_consent', student_id=s.id) }}"
+                class="d-inline ms-1">
+            <input type="hidden" name="pid" value="{{ pid }}">
+            <input type="hidden" name="new_consent" value="{{ 0 if s.media_consent != 0 else 1 }}">
+            <button type="submit"
+                    class="btn btn-sm {{ 'btn-danger' if s.media_consent == 0 else 'btn-outline-secondary' }}"
+                    title="{{ 'Click to Opt-in' if s.media_consent == 0 else 'Click to Opt-out' }}">
+              {{ '✗ Opt-out' if s.media_consent == 0 else 'Opt-out' }}
+            </button>
+          </form>
         </td>
       </tr>
       {% else %}
