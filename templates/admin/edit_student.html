@@ -76,7 +76,29 @@
                pattern="\+?\(?\d[\d\s\-\.\(\)]{5,17}\d"
                title="Enter a valid phone number with at least 7 digits (e.g. 732-555-1234)">
     </div>
-    <h6 class="text-uppercase text-muted small fw-600 mb-3" style="letter-spacing:.05em">Special Notes</h6>
+    <h6 class="text-uppercase text-muted small fw-600 mb-3 mt-4" style="letter-spacing:.05em">Student Type</h6>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-500">Student Type</label>
+        <select name="is_adult" class="form-select">
+          <option value="0" {% if not student.is_adult %}selected{% endif %}>Minor (Child)</option>
+          <option value="1" {% if student.is_adult %}selected{% endif %}>Adult</option>
+        </select>
+        <div class="form-text">Adults pay culture class fees only — no tuition.</div>
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-500">MFCS Affiliation</label>
+        <select name="mfcs_affiliation" class="form-select">
+          <option value="N" {% if student.mfcs_affiliation not in ('Y','P','G','B','A') %}selected{% endif %}>None</option>
+          <option value="P" {% if student.mfcs_affiliation == 'P' %}selected{% endif %}>Current Parent</option>
+          <option value="G" {% if student.mfcs_affiliation == 'G' %}selected{% endif %}>Grandparent</option>
+          <option value="B" {% if student.mfcs_affiliation == 'B' %}selected{% endif %}>Board Member</option>
+          <option value="A" {% if student.mfcs_affiliation == 'A' %}selected{% endif %}>Alumni</option>
+          <option value="Y" {% if student.mfcs_affiliation == 'Y' %}selected{% endif %}>Yes (general)</option>
+        </select>
+      </div>
+    </div>
+    <h6 class="text-uppercase text-muted small fw-600 mb-3 mt-4" style="letter-spacing:.05em">Special Notes</h6>
     <div class="mb-4">
       <textarea name="special_note" rows="4" class="form-control"
                 placeholder="Medical conditions, allergies, photo/social media permission, etc.">{{ student.special_note or '' }}</textarea>
