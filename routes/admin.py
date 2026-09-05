@@ -94,7 +94,24 @@ def _recalc_family_record(cur, fid, pid):
     if not period:
         return 0.0, False
 
-    from routes.family import _is_adult, _calc_student_fee, _calc_total_family_fee, _should_charge_late_fee
+    from routes.family import (_is_adult, _calc_student_fee, _calc_total_family_fee,
+                               _should_charge_late_fee, _get_tuition_rate)
+
+    # Fetch family_record first — needed for tuition_type and late fee status
+    cur.execute(
+        "SELECT total_paid, late_fee_waived, first_payment_date, reg_status, "
+        "tuition_type, tuition_override FROM family_record WHERE fid=%s AND pid=%s",
+        (fid, pid)
+    )
+    fpr_early = cur.fetchone() or {}
+    existing_status    = fpr_early.get('reg_status') or 'Pending'
+    total_paid_so_far  = float(fpr_early.get('total_paid') or 0)
+    late_fee_waived    = bool(fpr_early.get('late_fee_waived', 0))
+    first_payment_date = fpr_early.get('first_payment_date')
+
+    # Get effective tuition from stored tuition_type
+    eff_tuit, _ = _get_tuition_rate(period, fpr_early, None)
+
     cur.execute("""SELECT s.birthday, s.is_adult, s.mfcs_affiliation,
         sr.lcgrid, sr.ccgrid, sr.ccgrid2,
         COALESCE(cc.fee,0) AS cult_fee, COALESCE(cc2.fee,0) AS cult_fee2,
@@ -111,25 +128,13 @@ def _recalc_family_record(cur, fid, pid):
         student_subtotal += _calc_student_fee(
             r, period,
             float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0),
+            eff_tuition=eff_tuit,
             cult_discount=float(r['cult_disc'] or 0),
             cult_discount2=float(r['cult_disc2'] or 0)
         )
     minor_count = sum(1 for r in rows if not _is_adult(r))
 
-    try:
-        cur.execute("SELECT total_paid, late_fee_waived, first_payment_date, reg_status FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
-        fpr_row = cur.fetchone() or {}
-        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
-        late_fee_waived    = bool(fpr_row.get('late_fee_waived', 0))
-        first_payment_date = fpr_row.get('first_payment_date')
-        existing_status    = fpr_row.get('reg_status') or 'Pending'
-    except Exception:
-        cur.execute("SELECT total_paid, reg_status FROM family_record WHERE fid=%s AND pid=%s", (fid, pid))
-        fpr_row = cur.fetchone() or {}
-        total_paid_so_far  = float(fpr_row.get('total_paid') or 0)
-        late_fee_waived    = False
-        first_payment_date = None
-        existing_status    = fpr_row.get('reg_status') or 'Pending'
+    # (fpr_early fetched above — has total_paid, late_fee_waived, etc.)
 
     # Never add late fee to a family that has already completed registration
     if existing_status == 'Complete Registration':
@@ -1260,36 +1265,15 @@ def finance():
             s['is_adult'] = adult
             students_by_fid[s['fid']].append(s)
 
-        from routes.family import _should_charge_late_fee as _sclf, _effective_tuition, _is_returning_family, _is_late, _is_adult as _isa
+        from routes.family import (_should_charge_late_fee as _sclf, _effective_tuition,
+                                    _is_returning_family, _is_late, _is_adult as _isa,
+                                    _get_tuition_rate)
         for r in regs:
             r['balance'] = float(r['total_due'] or 0) - float(r['total_paid'] or 0) - float(r['adjustment'] or 0)
             details = students_by_fid.get(r['family_id'], [])
 
-            # Determine tuition type by back-calculating from stored total_due.
-            # Never use _effective_tuition() here — it checks today's date and
-            # returns 'standard (past deadline)' for everyone after the deadline.
-            tuit_type = 'standard'
-            eff_tuit  = float(sel.get('tuition') or 0)
-            gf = sel.get('grandfathered_tuition')
-            saved = float(r.get('total_due') or 0)
-
-            if r.get('tuition_override') == 'grandfathered':
-                tuit_type = 'grandfathered'
-                eff_tuit  = float(gf) if gf else eff_tuit
-            elif r.get('tuition_override') == 'standard':
-                tuit_type = 'standard'
-            elif gf and saved > 0.01:
-                # Back-calc: implied = (total - cult_fees - reg - pa) / minor_count
-                _cult_t  = sum(float(s.get('cf1',0)) + float(s.get('cf2',0)) for s in details)
-                _minors  = sum(1 for s in details if not s.get('is_adult'))
-                _reg     = float(sel.get('registration_fee') or 0)
-                _pa      = float(sel.get('pa_assignment_deposit') or 0)
-                if _minors > 0:
-                    _implied = (saved - _cult_t - _reg - _pa) / _minors
-                    if abs(_implied - float(gf)) <= 1.0:
-                        tuit_type = 'grandfathered'
-                        eff_tuit  = float(gf)
-
+            # Read tuition type directly from stored column — no back-calc needed
+            eff_tuit, tuit_type = _get_tuition_rate(sel, r, None)
             r['tuit_type'] = tuit_type
 
             # Apply per-family tuition and MFCS discount to each student
@@ -1646,16 +1630,13 @@ def set_tuition_override():
 
     conn2 = get_db_connection()
 
-    # Use the override rate directly — don't call _effective_tuition which
-    # ignores the override and may return wrong rate after deadline
+    # Use the override rate directly
     if new_override == 'grandfathered' and row.get('grandfathered_tuition'):
-        eff_tuit = float(row['grandfathered_tuition'])
-    elif new_override == 'standard':
-        eff_tuit = float(row['tuition'])
+        eff_tuit    = float(row['grandfathered_tuition'])
+        tuit_type_s = 'grandfathered'
     else:
-        # No override — use effective tuition
-        _, _ = _effective_tuition(period_dict, row['fid'], conn2)
-        eff_tuit, _ = _effective_tuition(period_dict, row['fid'], conn2)
+        eff_tuit    = float(row['tuition'])
+        tuit_type_s = 'standard' 
 
     # Get students and fees
     cur3 = conn2.cursor(dictionary=True)
@@ -1696,8 +1677,8 @@ def set_tuition_override():
 
     # Update total_due
     cur2.execute(
-        "UPDATE family_record SET total_due=%s, last_update=NOW() WHERE id=%s",
-        (new_total, fpr_id)
+        "UPDATE family_record SET total_due=%s, tuition_type=%s, last_update=NOW() WHERE id=%s",
+        (new_total, tuit_type_s, fpr_id)
     )
     conn.commit()
     conn.close()
@@ -2311,7 +2292,7 @@ def export_families():
 @admin_bp.route('/export/finance')
 @roles_required('admin','finance')
 def export_finance():
-    from routes.family import _is_adult, _effective_tuition, _calc_total_family_fee
+    from routes.family import _is_adult, _effective_tuition, _calc_total_family_fee, _get_tuition_rate
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     period = _cur_period(cur)
     pid = request.args.get('pid', period['id'] if period else 0)
@@ -2509,7 +2490,8 @@ def export_finance_summary():
     all_students = cur.fetchall()
     conn.close()
 
-    from routes.family import _is_adult, _effective_tuition, _is_returning_family, _should_charge_late_fee, _is_late
+    from routes.family import (_is_adult, _effective_tuition, _is_returning_family,
+                           _should_charge_late_fee, _is_late, _get_tuition_rate)
 
     # Group students by family
     from collections import defaultdict
@@ -2536,10 +2518,8 @@ def export_finance_summary():
         fid      = fam['family_id']
         students = students_by_fid.get(fid, [])
 
-        # Get effective tuition
-        _conn_t = get_db_connection()
-        eff_tuit, _ = _effective_tuition(period_data, fid, _conn_t)
-        _conn_t.close()
+        # Get effective tuition from stored tuition_type
+        eff_tuit, _ = _get_tuition_rate(period_data, fam, None)
 
         # Calculate per-student fees
         minor_count = 0
