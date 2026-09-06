@@ -2339,10 +2339,6 @@ def change_culture_class():
     family_last    = row['last_name_0']
     fid            = row['fid']
 
-    # Update student_record
-    cur.execute("""UPDATE student_record SET ccgrid=%s, ccgrid2=%s, last_update=NOW()
-        WHERE sid=%s AND pid=%s""", (new_ccgrid, new_ccgrid2, sid, pid))
-
     # ── Recalculate total_due ──────────────────────────────────────────────────
     cur.execute("SELECT * FROM period WHERE id=%s", (pid,))
     period = cur.fetchone()
@@ -2377,6 +2373,10 @@ def change_culture_class():
             tuit = 0.0 if _is_adult(s) else eff_tuit
             old_subtotal += tuit + cf1 + cf2
             if not _is_adult(s): old_minor_count += 1
+
+        # NOW update student_record (after old subtotal is captured)
+        cur.execute("""UPDATE student_record SET ccgrid=%s, ccgrid2=%s, last_update=NOW()
+            WHERE sid=%s AND pid=%s""", (new_ccgrid, new_ccgrid2, sid, pid))
 
         # Get NEW student subtotal (after this change — student_record already updated)
         cur.execute("""SELECT s.is_adult, s.birthday, s.mfcs_affiliation,
@@ -2442,6 +2442,9 @@ def change_culture_class():
             status_reverted = False
 
     else:
+        # Still update the student_record even if we can't recalc fees
+        cur.execute("""UPDATE student_record SET ccgrid=%s, ccgrid2=%s, last_update=NOW()
+            WHERE sid=%s AND pid=%s""", (new_ccgrid, new_ccgrid2, sid, pid))
         fee_changed    = False
         status_reverted = False
         new_total      = 0.0
