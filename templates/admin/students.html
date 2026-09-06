@@ -136,7 +136,7 @@
             Change Class
           </button>
           {% endif %}
-          {% if pid and (s.cult_class or s.cult_class2 or true) %}
+          {% if pid and not s.is_adult %}
           <button class="btn btn-sm btn-outline-warning ms-1"
                   data-bs-toggle="modal" data-bs-target="#changeCultModal"
                   data-sid="{{ s.id }}"
