@@ -1142,8 +1142,8 @@ def new_culture_class():
             flash('Period and name required.','error'); conn.close()
             return render_template('admin/class_form.html',cls=None,class_type='culture',periods_list=plist)
         allow2     = 1 if f.get('allow_as_second') else 0
-        audience   = f.get('audience', 'children')
-        adult_only = 1 if audience == 'adult' else 0
+        adult_only = 1 if f.get('adult_only') else 0
+        audience   = 'adult' if adult_only else 'children'
         try:
             cur.execute("""INSERT INTO class_group_record
                 (pid,name,chinese_name,type,fee,misc_fee,late_fee,discount,min_size,max_size,description,status,adult_only,allow_as_second,audience)
@@ -1177,8 +1177,8 @@ def edit_culture_class(cid):
     plist = _periods_list(cur)
     if request.method == 'POST':
         f = request.form; allow2 = 1 if f.get('allow_as_second') else 0
-        audience    = f.get('audience', 'children')
-        adult_only2 = 1 if audience == 'adult' else 0
+        adult_only2 = 1 if f.get('adult_only') else 0
+        audience    = 'adult' if adult_only2 else 'children'
         cur.execute("""UPDATE class_group_record SET pid=%s,name=%s,chinese_name=%s,
             fee=%s,misc_fee=0,late_fee=%s,discount=%s,min_size=%s,max_size=%s,
             description=%s,adult_only=%s,allow_as_second=%s,audience=%s WHERE id=%s""",
