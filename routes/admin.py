@@ -1212,7 +1212,7 @@ def finance():
             fr.id AS fpr_id,fr.total_due,fr.total_paid,fr.adjustment,
             fr.reg_status,fr.description,fr.last_update,
             fr.late_fee_waived, fr.tuition_override, fr.first_payment_date,
-            fr.reg_fee_waived,
+            fr.reg_fee_waived, fr.tuition_type,
             COUNT(DISTINCT CASE WHEN (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL) THEN sr.sid END) AS student_count
             FROM family_record fr JOIN family f ON f.id=fr.fid
             LEFT JOIN student s ON s.fid=f.id
