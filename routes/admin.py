@@ -2344,7 +2344,8 @@ def change_culture_class():
     period = cur.fetchone()
 
     cur.execute("""SELECT id, total_due, reg_status, total_paid, late_fee_waived,
-        first_payment_date, tuition_type, tuition_override, reg_fee_waived
+        first_payment_date, tuition_type, tuition_override, reg_fee_waived,
+        description
         FROM family_record WHERE fid=%s AND pid=%s""", (fid, pid))
     fpr = cur.fetchone()
 
