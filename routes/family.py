@@ -234,6 +234,7 @@ def _get_tuition_rate(period, fpr, conn):
     Falls back to _effective_tuition() only for new families (no fpr yet).
 
     Returns (eff_tuition, tuition_type) — same signature as _effective_tuition.
+    tuition_type is always normalized to 'grandfathered' or 'standard'.
     """
     std = float(period.get('tuition') or 0)
     gf  = period.get('grandfathered_tuition')
@@ -241,7 +242,10 @@ def _get_tuition_rate(period, fpr, conn):
 
     if not fpr:
         # New family — use _effective_tuition to determine rate
-        return _effective_tuition(period, None, conn)
+        rate, raw_type = _effective_tuition(period, None, conn)
+        # Normalize: anything containing 'grandfathered' → 'grandfathered'
+        ttype = 'grandfathered' if 'grandfathered' in (raw_type or '').lower() else 'standard'
+        return rate, ttype
 
     # Read stored tuition_type first (most reliable)
     ttype = (fpr.get('tuition_type') or '').strip().lower()
@@ -250,6 +254,12 @@ def _get_tuition_rate(period, fpr, conn):
     override = (fpr.get('tuition_override') or '').strip().lower()
     if override in ('grandfathered', 'standard'):
         ttype = override
+
+    # Normalize — strip any suffix like '(past deadline)' or '(finance override)'
+    if 'grandfathered' in ttype:
+        ttype = 'grandfathered'
+    else:
+        ttype = 'standard'
 
     if ttype == 'grandfathered' and gf:
         return gf_rate, 'grandfathered'
