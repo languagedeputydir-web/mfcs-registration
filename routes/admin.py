@@ -2131,7 +2131,8 @@ def students():
             where.append("(s.special_note IS NULL OR s.special_note = '')")
         cur.execute(f"""SELECT s.*,f.last_name_0 AS family_last,f.first_name_0 AS family_first,
             f.primary_email AS family_email,f.id AS family_id,
-            lc.name AS lang_class,cc.name AS cult_class,cc2.name AS cult_class2
+            lc.name AS lang_class,cc.name AS cult_class,cc2.name AS cult_class2,
+            sr.ccgrid AS cult_class_id, sr.ccgrid2 AS cult_class2_id
             FROM student_record sr
             JOIN student s ON s.id=sr.sid JOIN family f ON f.id=s.fid
             LEFT JOIN class_group_record lc ON lc.id=sr.lcgrid
@@ -2255,6 +2256,278 @@ def toggle_media_consent(student_id):
     name   = f"{row['first_name']} {row['last_name']}" if row else f"Student {student_id}"
     status = 'Opted out' if new_consent == 0 else 'Opted in'
     flash(f'{name}: media consent set to {status}.', 'success')
+
+    return redirect(url_for('admin.students', pid=pid))
+
+
+@admin_bp.route('/students/change-culture', methods=['POST'])
+@roles_required('admin', 'culture')
+def change_culture_class():
+    """Admin/culture coordinator changes a student's culture class assignment.
+    Recalculates total_due using stored tuition_type (no back-calc).
+    Reverts Complete Registration to Pending if fee changes.
+    """
+    from routes.family import (_is_adult, _calc_student_fee, _calc_total_family_fee,
+                                _get_tuition_rate)
+
+    sid         = request.form.get('sid', '').strip()
+    pid         = request.form.get('pid', '').strip()
+    new_ccgrid  = request.form.get('new_ccgrid',  '').strip() or None
+    new_ccgrid2 = request.form.get('new_ccgrid2', '').strip() or None
+    reason      = request.form.get('reason', '').strip()
+
+    if not sid or not pid:
+        flash('Missing required fields.', 'danger')
+        return redirect(url_for('admin.students', pid=pid))
+
+    # Convert to int or None
+    new_ccgrid  = int(new_ccgrid)  if new_ccgrid  else None
+    new_ccgrid2 = int(new_ccgrid2) if new_ccgrid2 else None
+
+    # Clearing culture 1 must also clear culture 2
+    if not new_ccgrid:
+        new_ccgrid2 = None
+
+    # Culture 1 and 2 cannot be the same
+    if new_ccgrid and new_ccgrid2 and new_ccgrid == new_ccgrid2:
+        flash('Culture Class 1 and Culture Class 2 cannot be the same.', 'danger')
+        return redirect(url_for('admin.students', pid=pid))
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+
+    # Get student, current classes, family info
+    cur.execute("""SELECT s.first_name, s.last_name, s.fid, s.is_adult, s.birthday,
+        s.mfcs_affiliation,
+        sr.ccgrid AS old_ccgrid, sr.ccgrid2 AS old_ccgrid2,
+        old_cc.name  AS old_cult_name,  old_cc.fee  AS old_cult_fee,
+        old_cc2.name AS old_cult2_name, old_cc2.fee AS old_cult2_fee,
+        f.primary_email, f.first_name_0, f.last_name_0
+        FROM student s
+        JOIN student_record sr ON sr.sid=s.id AND sr.pid=%s
+        LEFT JOIN class_group_record old_cc  ON old_cc.id  = sr.ccgrid
+        LEFT JOIN class_group_record old_cc2 ON old_cc2.id = sr.ccgrid2
+        JOIN family f ON f.id = s.fid
+        WHERE s.id=%s""", (pid, sid))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash('Student or registration not found.', 'danger')
+        return redirect(url_for('admin.students', pid=pid))
+
+    # Get new class names and fees
+    new_cult_name = None; new_cult_fee  = 0.0
+    new_cult2_name = None; new_cult2_fee = 0.0
+    if new_ccgrid:
+        cur.execute("SELECT name, fee FROM class_group_record WHERE id=%s", (new_ccgrid,))
+        nc = cur.fetchone()
+        if nc:
+            new_cult_name = nc['name']
+            new_cult_fee  = float(nc['fee'] or 0)
+    if new_ccgrid2:
+        cur.execute("SELECT name, fee FROM class_group_record WHERE id=%s", (new_ccgrid2,))
+        nc2 = cur.fetchone()
+        if nc2:
+            new_cult2_name = nc2['name']
+            new_cult2_fee  = float(nc2['fee'] or 0)
+
+    old_cult_name  = row['old_cult_name']  or '(none)'
+    old_cult2_name = row['old_cult2_name'] or '(none)'
+    student_name   = f"{row['first_name']} {row['last_name']}"
+    family_email   = row['primary_email']
+    family_first   = row['first_name_0']
+    family_last    = row['last_name_0']
+    fid            = row['fid']
+
+    # Update student_record
+    cur.execute("""UPDATE student_record SET ccgrid=%s, ccgrid2=%s, last_update=NOW()
+        WHERE sid=%s AND pid=%s""", (new_ccgrid, new_ccgrid2, sid, pid))
+
+    # ── Recalculate total_due ──────────────────────────────────────────────────
+    cur.execute("SELECT * FROM period WHERE id=%s", (pid,))
+    period = cur.fetchone()
+
+    cur.execute("""SELECT id, total_due, reg_status, total_paid, late_fee_waived,
+        first_payment_date, tuition_type, tuition_override, reg_fee_waived
+        FROM family_record WHERE fid=%s AND pid=%s""", (fid, pid))
+    fpr = cur.fetchone()
+
+    if period and fpr:
+        # Get tuition rate from stored tuition_type
+        eff_tuit, _ = _get_tuition_rate(period, fpr, conn)
+
+        # Get OLD student subtotal (before this change) to correctly extract late fee
+        cur.execute("""SELECT s.is_adult, s.birthday, s.mfcs_affiliation,
+            COALESCE(cc.fee,0)  AS cult_fee,  COALESCE(cc.discount,0)  AS cult_disc,
+            COALESCE(cc2.fee,0) AS cult_fee2, COALESCE(cc2.discount,0) AS cult_disc2
+            FROM student s
+            JOIN student_record sr ON sr.sid=s.id AND sr.pid=%s
+            LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+            LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+            WHERE s.fid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+            """, (pid, fid))
+        old_students = cur.fetchall()
+        old_subtotal = 0.0
+        old_minor_count = 0
+        for s in old_students:
+            mfcs = s.get('mfcs_affiliation') == 'Y'
+            cf1  = max(0, float(s['cult_fee']  or 0) - (float(s['cult_disc']  or 0) if mfcs else 0))
+            cf2  = max(0, float(s['cult_fee2'] or 0) - (float(s['cult_disc2'] or 0) if mfcs else 0))
+            tuit = 0.0 if _is_adult(s) else eff_tuit
+            old_subtotal += tuit + cf1 + cf2
+            if not _is_adult(s): old_minor_count += 1
+
+        # Get NEW student subtotal (after this change — student_record already updated)
+        cur.execute("""SELECT s.is_adult, s.birthday, s.mfcs_affiliation,
+            COALESCE(cc.fee,0)  AS cult_fee,  COALESCE(cc.discount,0)  AS cult_disc,
+            COALESCE(cc2.fee,0) AS cult_fee2, COALESCE(cc2.discount,0) AS cult_disc2
+            FROM student s
+            JOIN student_record sr ON sr.sid=s.id AND sr.pid=%s
+            LEFT JOIN class_group_record cc  ON cc.id=sr.ccgrid
+            LEFT JOIN class_group_record cc2 ON cc2.id=sr.ccgrid2
+            WHERE s.fid=%s
+            AND (sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)
+            """, (pid, fid))
+        new_students = cur.fetchall()
+        student_subtotal = 0.0
+        minor_count = 0
+        for s in new_students:
+            mfcs = s.get('mfcs_affiliation') == 'Y'
+            cf1  = max(0, float(s['cult_fee']  or 0) - (float(s['cult_disc']  or 0) if mfcs else 0))
+            cf2  = max(0, float(s['cult_fee2'] or 0) - (float(s['cult_disc2'] or 0) if mfcs else 0))
+            tuit = 0.0 if _is_adult(s) else eff_tuit
+            student_subtotal += tuit + cf1 + cf2
+            if not _is_adult(s): minor_count += 1
+
+        # Preserve existing late fee — don't add or remove
+        old_total   = float(fpr['total_due'] or 0)
+        reg_fee     = float(period.get('registration_fee') or 0)
+        pa_fee      = float(period.get('pa_assignment_deposit') or 0)
+        disc_per    = float(period.get('discount') or 0)
+        old_extra   = max(0, old_minor_count - 2)
+        old_multi   = old_extra * disc_per
+        new_extra   = max(0, minor_count - 2)
+        new_multi   = new_extra * disc_per
+
+        # Extract late fee from OLD total using OLD subtotal
+        # late_fee = old_total - old_subtotal - reg - pa + old_multi_disc
+        old_reg = 0.0 if fpr.get('reg_fee_waived') else reg_fee
+        late_fee_unit = float(period.get('late_fee') or 0)
+        raw_late = max(0.0, old_total - old_subtotal - old_reg - pa_fee + old_multi)
+        late_fee = round(raw_late / late_fee_unit) * late_fee_unit if late_fee_unit > 0 else 0.0
+
+        new_total = student_subtotal + reg_fee + pa_fee + late_fee - new_multi
+
+        # Handle reg fee waiver
+        if fpr.get('reg_fee_waived'):
+            new_total -= reg_fee
+
+        old_status  = fpr.get('reg_status') or 'Pending'
+        fee_changed = abs(new_total - old_total) > 0.01
+
+        if fee_changed:
+            if old_status == 'Complete Registration':
+                note = ((fpr.get('description') or '') +
+                        f' [Culture class changed ${old_total:.2f}→${new_total:.2f} — review payment]')[:9999]
+                cur.execute("""UPDATE family_record SET total_due=%s, reg_status='Pending',
+                    description=%s, last_update=NOW() WHERE id=%s""",
+                    (new_total, note, fpr['id']))
+                status_reverted = True
+            else:
+                cur.execute("""UPDATE family_record SET total_due=%s, last_update=NOW()
+                    WHERE id=%s""", (new_total, fpr['id']))
+                status_reverted = False
+        else:
+            status_reverted = False
+
+    else:
+        fee_changed    = False
+        status_reverted = False
+        new_total      = 0.0
+        old_total      = 0.0
+
+    conn.commit()
+    conn.close()
+
+    # ── Build changes summary for flash + email ────────────────────────────────
+    changes = []
+    if (new_ccgrid or None) != (row['old_ccgrid'] or None):
+        new_name = new_cult_name or '(none)'
+        changes.append(f"Culture 1: {old_cult_name} → {new_name}")
+    if (new_ccgrid2 or None) != (row['old_ccgrid2'] or None):
+        new2_name = new_cult2_name or '(none)'
+        changes.append(f"Culture 2: {old_cult2_name} → {new2_name}")
+
+    changes_str = ' | '.join(changes) if changes else 'No class changes'
+
+    if status_reverted:
+        flash(f'Culture class updated for {student_name}. '
+              f'Fee changed ${old_total:.0f}→${new_total:.0f} — '
+              f'registration reverted to Pending. Family notified.', 'warning')
+    elif fee_changed:
+        flash(f'Culture class updated for {student_name}. '
+              f'Fee changed ${old_total:.0f}→${new_total:.0f}. Family notified.', 'info')
+    else:
+        flash(f'Culture class updated for {student_name}. Family notified.', 'success')
+
+    # ── Send email to family ───────────────────────────────────────────────────
+    try:
+        subject = f'MFCS — Culture Class Updated for {student_name}'
+        fee_note = ''
+        if fee_changed:
+            fee_note = (f"\n\nFee adjustment:\n"
+                       f"  Previous total due: ${old_total:.2f}\n"
+                       f"  New total due:      ${new_total:.2f}\n")
+            if status_reverted:
+                fee_note += ("\nYour registration status has been set back to Pending. "
+                            "Please contact us at languagedeputydir@mfcsnj.org "
+                            "regarding any payment adjustment.")
+
+        text_body = (
+            f"Dear {family_first} {family_last},\n\n"
+            f"The culture class assignment for {student_name} has been updated "
+            f"by the school administration.\n\n"
+            f"{changes_str}\n"
+            + (f"Reason: {reason}\n" if reason else "")
+            + fee_note
+            + f"\nIf you have any questions, please contact us at "
+            f"languagedeputydir@mfcsnj.org.\n\n"
+            f"Monmouth Fidelity Chinese School"
+        )
+
+        fee_rows = ''
+        if fee_changed:
+            fee_rows = (
+                f"<tr><td><strong>Previous Total Due</strong></td>"
+                f"<td>${old_total:.2f}</td></tr>"
+                f"<tr><td><strong>New Total Due</strong></td>"
+                f"<td>${new_total:.2f}</td></tr>"
+            )
+            if status_reverted:
+                fee_rows += (
+                    f"<tr><td colspan='2' style='color:#e74c3c'>"
+                    f"Your registration status has been set back to Pending. "
+                    f"Please contact us regarding any payment adjustment.</td></tr>"
+                )
+
+        html_body = (
+            f"<p>Dear {family_first} {family_last},</p>"
+            f"<p>The culture class assignment for <strong>{student_name}</strong> "
+            f"has been updated by the school administration.</p>"
+            f"<table border='1' cellpadding='8' cellspacing='0' "
+            f"style='border-collapse:collapse;margin-bottom:12px'>"
+            f"<tr><td><strong>Change</strong></td><td>{changes_str}</td></tr>"
+            + (f"<tr><td><strong>Reason</strong></td><td>{reason}</td></tr>" if reason else "")
+            + fee_rows
+            + f"</table>"
+            f"<p>If you have any questions, please contact us at "
+            f"<a href='mailto:languagedeputydir@mfcsnj.org'>languagedeputydir@mfcsnj.org</a>.</p>"
+            f"<p>Monmouth Fidelity Chinese School</p>"
+        )
+        _send_email(family_email, subject, text_body, html_body)
+    except Exception as e:
+        flash(f'Class updated but email failed: {e}', 'warning')
 
     return redirect(url_for('admin.students', pid=pid))
 

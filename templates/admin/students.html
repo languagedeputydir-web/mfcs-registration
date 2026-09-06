@@ -136,6 +136,19 @@
             Change Class
           </button>
           {% endif %}
+          {% if pid and (s.cult_class or s.cult_class2 or true) %}
+          <button class="btn btn-sm btn-outline-warning ms-1"
+                  data-bs-toggle="modal" data-bs-target="#changeCultModal"
+                  data-sid="{{ s.id }}"
+                  data-pid="{{ pid }}"
+                  data-name="{{ s.first_name }} {{ s.last_name }}"
+                  data-cult="{{ s.cult_class or '' }}"
+                  data-cult2="{{ s.cult_class2 or '' }}"
+                  data-cultid="{{ s.cult_class_id or '' }}"
+                  data-cult2id="{{ s.cult_class2_id or '' }}">
+            Change Culture
+          </button>
+          {% endif %}
           <form method="post"
                 action="{{ url_for('admin.toggle_media_consent', student_id=s.id) }}"
                 class="d-inline ms-1">
@@ -196,6 +209,68 @@
   </div>
 </div>
 
+<!-- Change Culture Class Modal -->
+<div class="modal fade" id="changeCultModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Change Culture Class</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('admin.change_culture_class') }}">
+        <div class="modal-body">
+          <input type="hidden" name="sid" id="cult_modal_sid">
+          <input type="hidden" name="pid" id="cult_modal_pid">
+          <p class="mb-3">
+            Student: <strong id="cult_modal_name"></strong><br>
+            Current Culture 1: <strong id="cult_modal_current"></strong><br>
+            Current Culture 2: <strong id="cult_modal_current2"></strong>
+          </p>
+          <div class="mb-3">
+            <label class="form-label fw-500">Culture Class 1
+              <span class="text-muted small">(leave blank to clear)</span>
+            </label>
+            <select name="new_ccgrid" id="cult_modal_select1" class="form-select">
+              <option value="">(None — clear culture class)</option>
+              {% for cc in cult_classes %}
+              <option value="{{ cc.id }}">{{ cc.name }}{% if cc.fee %} — ${{ cc.fee|int }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-500">Culture Class 2
+              <span class="text-muted small">(optional, requires Culture 1)</span>
+            </label>
+            <select name="new_ccgrid2" id="cult_modal_select2" class="form-select">
+              <option value="">(None)</option>
+              {% for cc in cult_classes %}
+              {% if cc.allow_as_second %}
+              <option value="{{ cc.id }}">{{ cc.name }}{% if cc.fee %} — ${{ cc.fee|int }}{% endif %}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-500">Reason / Note
+              <span class="text-muted small">(included in email to family)</span>
+            </label>
+            <input type="text" name="reason" class="form-control"
+                   placeholder="e.g. Class full — moved to alternative">
+          </div>
+          <div class="alert alert-warning small py-2 mb-0">
+            ⚠ If the culture fee changes, <strong>total due will be recalculated</strong>.
+            If the registration is Complete, it will revert to Pending.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Update & Notify Family</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
 document.getElementById('changeLangModal').addEventListener('show.bs.modal', function(e) {
   const btn = e.relatedTarget;
@@ -203,6 +278,25 @@ document.getElementById('changeLangModal').addEventListener('show.bs.modal', fun
   document.getElementById('modal_lang_pid').value      = btn.dataset.pid;
   document.getElementById('modal_student_name').textContent  = btn.dataset.name;
   document.getElementById('modal_current_class').textContent = btn.dataset.current;
+});
+
+document.getElementById('changeCultModal').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  document.getElementById('cult_modal_sid').value    = btn.dataset.sid;
+  document.getElementById('cult_modal_pid').value    = btn.dataset.pid;
+  document.getElementById('cult_modal_name').textContent     = btn.dataset.name;
+  document.getElementById('cult_modal_current').textContent  = btn.dataset.cult  || '(none)';
+  document.getElementById('cult_modal_current2').textContent = btn.dataset.cult2 || '(none)';
+
+  // Pre-select current classes
+  const sel1 = document.getElementById('cult_modal_select1');
+  const sel2 = document.getElementById('cult_modal_select2');
+  for (let opt of sel1.options) {
+    opt.selected = (opt.value === btn.dataset.cultid);
+  }
+  for (let opt of sel2.options) {
+    opt.selected = (opt.value === btn.dataset.cult2id);
+  }
 });
 </script>
 {% endblock %}
