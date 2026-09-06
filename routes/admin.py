@@ -2110,7 +2110,7 @@ def students():
         cur.execute("SELECT * FROM period WHERE id=%s",(pid,)); sel = cur.fetchone()
         cur.execute("SELECT id,name FROM class_group_record WHERE pid=%s AND type='language' ORDER BY name",(pid,))
         lang_classes = cur.fetchall()
-        cur.execute("SELECT id,name FROM class_group_record WHERE pid=%s AND type='culture' ORDER BY name",(pid,))
+        cur.execute("SELECT id,name,fee,allow_as_second FROM class_group_record WHERE pid=%s AND type='culture' ORDER BY name",(pid,))
         cult_classes = cur.fetchall()
         where = ["sr.pid=%s",
                  "(sr.lcgrid IS NOT NULL OR sr.ccgrid IS NOT NULL OR sr.ccgrid2 IS NOT NULL)"]
