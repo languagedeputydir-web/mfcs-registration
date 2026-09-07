@@ -203,7 +203,7 @@
           {% endif %}
           {% endif %}
 
-          {% if selected_period and selected_period.grandfathered_tuition %}
+          {% if selected_period and selected_period.grandfathered_tuition and ns.minors > 0 %}
           {% if r.tuition_override == 'grandfathered' or ('grandfathered' in (r.tuit_type or '')) %}
           <form method="post" action="{{ url_for('admin.set_tuition_override') }}" class="d-inline ms-1">
             <input type="hidden" name="fpr_id" value="{{ r.fpr_id }}">
