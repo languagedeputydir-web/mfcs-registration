@@ -124,11 +124,11 @@ def _recalc_family_record(cur, fid, pid):
     rows = cur.fetchall()
 
     student_subtotal = 0.0
+    _period_with_rate = {**period, 'tuition': eff_tuit}
     for r in rows:
         student_subtotal += _calc_student_fee(
-            r, period,
+            r, _period_with_rate,
             float(r['cult_fee'] or 0), float(r['cult_fee2'] or 0),
-            eff_tuition=eff_tuit,
             cult_discount=float(r['cult_disc'] or 0),
             cult_discount2=float(r['cult_disc2'] or 0)
         )
@@ -887,18 +887,7 @@ def assign_student(crid):
                 return redirect(url_for('admin.class_assignments', cgrid=cgrid))
         try:
             cur.execute("INSERT INTO class_assignment (crid,srid) VALUES(%s,%s)",(crid,srid))
-            conn.commit()
-        except Exception as ex:
-            conn.rollback()
-            if '1062' in str(ex) or 'Duplicate' in str(ex):
-                flash('Student already assigned to this section.','warning')
-            else:
-                flash(f'Could not assign student: {ex}','danger')
-            conn.close()
-            return redirect(url_for('admin.class_assignments', cgrid=cgrid))
-
-        # INSERT succeeded — now recalculate family total
-        try:
+            # Recalculate family total after class change
             cur.execute("SELECT sid FROM student_record WHERE id=%s",(srid,))
             sr = cur.fetchone()
             if sr:
@@ -906,7 +895,6 @@ def assign_student(crid):
                 stu = cur.fetchone()
                 if stu and sec:
                     new_total, reverted = _recalc_family_record(cur, stu['fid'], sec['pid'])
-                    conn.commit()
                     if reverted:
                         flash(f'Student assigned. Fee changed to ${new_total:.2f} — '
                               f'registration set back to Pending.','warning')
@@ -916,9 +904,10 @@ def assign_student(crid):
                     flash('Student assigned to section.','success')
             else:
                 flash('Student assigned to section.','success')
-        except Exception as ex2:
-            print(f'Recalc error after assign: {ex2}', flush=True)
-            flash('Student assigned to section (fee recalculation failed — check manually).','warning')
+            conn.commit()
+        except Exception as ex:
+            conn.rollback()
+            flash('Student already assigned to this section.','warning')
     conn.close()
     return redirect(url_for('admin.class_assignments', cgrid=cgrid))
 
