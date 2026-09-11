@@ -1236,6 +1236,10 @@ def submit_registration(period_id):
     # Total = student fees + registration fee + PA deposit + late fee - multi-kid discount
     total_due = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
+    # Subtract registration fee if waived by admin
+    if reg_fee_waived and minor_count > 0:
+        total_due -= float(period.get('registration_fee') or 0)
+
     if fpr:
         old_total    = float(fpr.get('old_total') or fpr.get('total_due') or 0)
         old_status   = _old_status
