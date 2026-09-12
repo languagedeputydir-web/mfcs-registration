@@ -1237,7 +1237,8 @@ def submit_registration(period_id):
     total_due = _calc_total_family_fee(student_subtotal, period, minor_count, late_fee_total)
 
     # Subtract registration fee if waived by admin
-    if reg_fee_waived and minor_count > 0:
+    _reg_fee_waived = bool((fpr or {}).get('reg_fee_waived', 0))
+    if _reg_fee_waived and minor_count > 0:
         total_due -= float(period.get('registration_fee') or 0)
 
     if fpr:
