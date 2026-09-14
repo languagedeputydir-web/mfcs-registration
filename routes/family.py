@@ -1186,7 +1186,7 @@ def submit_registration(period_id):
     # Fetch existing family_record before calculating late fee
     cur.execute(
         "SELECT id, total_due AS old_total, reg_status, total_paid, "
-        "late_fee_waived, first_payment_date FROM family_record "
+        "late_fee_waived, first_payment_date, late_fee_amount FROM family_record "
         "WHERE fid = %s AND pid = %s",
         (current_user.id, period_id)
     )
@@ -1202,8 +1202,12 @@ def submit_registration(period_id):
     if _old_status == 'Complete Registration':
         charge_late, per_minor_late = False, 0.0
     else:
-        # Only charge late fee if a MINOR's registration changed.
-        # If only adult classes were added/changed, no late fee applies.
+        # Determine late fee using stored late_fee_amount where available.
+        # This avoids the ambiguity of re-calculating on re-submission:
+        # - First submission: calculate fresh via _should_charge_late_fee
+        # - Re-submission with only adult changes: preserve stored late fee
+        # - Re-submission with minor changes: recalculate
+
         cur.execute("""SELECT sr.sid, sr.lcgrid, sr.ccgrid, sr.ccgrid2
             FROM student_record sr JOIN student s ON s.id=sr.sid
             WHERE sr.pid=%s AND s.fid=%s AND s.is_adult=0""",
@@ -1223,14 +1227,23 @@ def submit_registration(period_id):
                 minor_changed = True
                 break
 
-        if minor_changed or not old_minor_rows:
+        _stored_late_fee = float((fpr or {}).get('late_fee_amount') or 0)
+        _has_stored_late  = _stored_late_fee > 0.01
+
+        if old_minor_rows and not minor_changed and _has_stored_late:
+            # Adult-only change — preserve stored late fee exactly
+            charge_late    = True
+            per_minor_late = _stored_late_fee / len(old_minor_rows)
+        elif old_minor_rows and not minor_changed and not _has_stored_late:
+            # Minors unchanged, no stored late fee — adult-only change, skip
+            charge_late, per_minor_late = False, 0.0
+        else:
+            # First submission or minor classes changed — calculate fresh
             charge_late, per_minor_late = _should_charge_late_fee(
                 period, current_user.id, period_id,
                 _total_paid_so_far, _late_fee_waived, conn,
                 first_payment_date=_first_payment_date
             )
-        else:
-            charge_late, per_minor_late = False, 0.0
     late_fee_total = minor_count * per_minor_late if charge_late else 0.0
 
     # Total = student fees + registration fee + PA deposit + late fee - multi-kid discount
@@ -1256,8 +1269,8 @@ def submit_registration(period_id):
             new_note = (existing_note + note_suffix)[:9999]
             cur.execute(
                 "UPDATE family_record SET total_due=%s, reg_status=%s, tuition_type=%s, "
-                "description=%s, last_update=NOW() WHERE id=%s",
-                (total_due, new_status, tuition_type, new_note, fpr['id'])
+                "late_fee_amount=%s, description=%s, last_update=NOW() WHERE id=%s",
+                (total_due, new_status, tuition_type, late_fee_total, new_note, fpr['id'])
             )
             flash('Registration updated. Fee changed — status set back to Pending '
                   f'(was ${old_total:.2f}, now ${total_due:.2f}).', 'warning')
@@ -1266,8 +1279,8 @@ def submit_registration(period_id):
             new_status = old_status if not fee_changed else 'Pending'
             cur.execute(
                 "UPDATE family_record SET total_due=%s, reg_status=%s, tuition_type=%s, "
-                "last_update=NOW() WHERE id=%s",
-                (total_due, new_status, tuition_type, fpr['id'])
+                "late_fee_amount=%s, last_update=NOW() WHERE id=%s",
+                (total_due, new_status, tuition_type, late_fee_total, fpr['id'])
             )
             if fee_changed:
                 flash('Registration updated. Fee changed — awaiting payment confirmation.', 'info')
@@ -1276,9 +1289,9 @@ def submit_registration(period_id):
     else:
         cur.execute(
             "INSERT INTO family_record "
-            "(fid, pid, total_due, reg_status, tuition_type, reg_time, last_update) "
-            "VALUES (%s, %s, %s, 'Pending', %s, NOW(), NOW())",
-            (current_user.id, period_id, total_due, tuition_type)
+            "(fid, pid, total_due, reg_status, tuition_type, late_fee_amount, reg_time, last_update) "
+            "VALUES (%s, %s, %s, 'Pending', %s, %s, NOW(), NOW())",
+            (current_user.id, period_id, total_due, tuition_type, late_fee_total)
         )
         flash('Registration submitted!', 'success')
 
